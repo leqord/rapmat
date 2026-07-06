@@ -1,0 +1,64 @@
+[project]
+name = "rapmat"
+dynamic = ["version"]
+description = "Rapid materials discovery using MLIPs"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ase>=3.27.0",
+    "chemparse>=0.3.2",
+    "phonopy>=2.47.1",
+    "pydantic>=2.12.5",
+    "pymatgen>=2025.10.7",
+    "pyxtal>=1.1.2",
+    "scipy>=1.14.0",
+    "seekpath>=2.2.1",
+    "spglib>=2.7.0",
+    "urwid>=2.6.0",
+    "torch>=2.9.0,<2.10.0",
+    "dscribe==2.1.2",
+    "matplotlib>=3.8.0",
+    "platformdirs>=4.9.4",
+    "filelock>=3.13.0",
+    "sqlalchemy>=2.0.30",
+    "alembic>=1.13",
+    "tomli-w>=1.2.0",
+    "tabulate>=0.10.0",
+]
+
+license = "GPL-3.0-or-later"
+authors = [{ name = "Michael", email = "leqord@proton.me" }]
+
+[project.urls]
+Homepage = "https://github.com/leqord/rapmat"
+
+[project.optional-dependencies]
+mattersim = ["mattersim>=1.2.0"]
+nequip = ["nequip>=0.16.2"]
+
+# TODO: the warp-lang is not direct dependency, 
+# drop the warp-lang pin once 'import upet' works with warp >= 1.14
+
+upet = ["upet>=0.2.1", "warp-lang<1.14"]
+all-calculators = [
+    "mattersim>=1.2.0",
+    "nequip>=0.16.2",
+    "upet>=0.2.1",
+    "warp-lang<1.14",
+]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[project.scripts]
+rapmat = "rapmat.main:app_main"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:spglib.*",
+]

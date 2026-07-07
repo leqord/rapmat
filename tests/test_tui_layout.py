@@ -1,6 +1,4 @@
-import sys
 
-import urwid
 
 
 def test_tui():

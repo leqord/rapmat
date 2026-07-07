@@ -192,7 +192,7 @@ def build_phase_diagram(
     for sd in structure_data:
         comp = Composition(sd.formula)
         entry = PDEntry(comp, sd.effective_per_atom * comp.num_atoms)
-        sd.energy_above_hull = pd.get_e_above_hull(entry)
+        sd.energy_above_hull = float(pd.get_e_above_hull(entry))
         sd.is_stable = sd.energy_above_hull < 1e-6
 
     if not show_all:

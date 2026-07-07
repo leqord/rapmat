@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import urwid
 
 from rapmat.tui.keymap import KeyBinding
@@ -6,6 +8,9 @@ from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.config_grid import build_config_grid
 from rapmat.tui.widgets.table import SortableTable
+
+if TYPE_CHECKING:
+    from rapmat.core.entities import RunMetadata
 
 _RUN_COLS = [
     ("Run Name", 28),
@@ -257,7 +262,7 @@ class StudyDetailScreen(ScreenBase):
 
         msg = f"Are you sure you want to permanently delete run '{run_name}' and all its structures?"
         if is_active:
-            msg += "\n\nWARNING: This run appears to be ACTIVE (processed by worker {worker_id[:4]}). Deleting it may cause worker errors."
+            msg += f"\n\nWARNING: This run appears to be claimed and being processed right now by the {worker_id[:4]} worker"
 
         dlg = ModalDialog.confirm(
             title="Delete Run",

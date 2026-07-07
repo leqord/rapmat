@@ -57,10 +57,11 @@ class DedupScreen(ScreenBase):
         if self._applying:
             return []
         if self._overlay_open:
-            overlay_active = (
-                lambda: self._frame is not None
-                and self._frame.body is self._results_overlay
-            )
+            def overlay_active() -> bool:
+                return (
+                    self._frame is not None
+                    and self._frame.body is self._results_overlay
+                )
             return [
                 KeyBinding(
                     ("a",), "Apply to DB", self._apply_to_db,

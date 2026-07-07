@@ -7,7 +7,6 @@ cancel their background tasks in ``on_leave``.
 import sys
 
 import pytest
-import urwid
 
 if sys.platform == "win32":
     sys.modules.pop("urwid.display.curses", None)

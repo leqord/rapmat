@@ -1,6 +1,5 @@
 import sys
 
-import urwid
 
 
 def test_render():
@@ -32,7 +31,7 @@ def test_dialog_remap_covers_default_bg_attrs():
     by_name = {entry[0]: entry for entry in PALETTE}
 
     for entry in PALETTE:
-        name, fg, bg = entry[0], entry[1], entry[2]
+        name, bg = entry[0], entry[2]
         if name.endswith("@dlg"):
             continue
         if bg != "default":

@@ -2,7 +2,7 @@
 
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 import urwid
@@ -69,7 +69,7 @@ class TestSortableTable:
 
         received = []
         data = [{"name": "a", "val": 1}, {"name": "b", "val": 2}]
-        table = SortableTable(
+        SortableTable(
             columns=[("Name", 10), ("Val", 6)],
             row_data=data,
             format_row=lambda r: [r["name"], str(r["val"])],

@@ -5,8 +5,7 @@ import pytest
 from ase.build import bulk
 from conftest import add_generated_candidate
 
-from rapmat.core.dedup_analysis import (DedupSimulationResult,
-                                        compute_pairwise_distances,
+from rapmat.core.dedup_analysis import (compute_pairwise_distances,
                                         find_threshold_for_survival,
                                         plot_distance_histogram,
                                         simulate_deduplication)

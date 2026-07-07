@@ -1,6 +1,7 @@
 """Tests for physical sanity checks on relaxed structures."""
 
-import numpy as np
+import importlib.util
+
 import pytest
 from ase import Atoms
 from ase.build import bulk
@@ -68,9 +69,7 @@ class TestCheckSanity:
 class TestHasCloseContactsPymatgen:
     @pytest.fixture(autouse=True)
     def skip_if_no_pymatgen(self):
-        try:
-            from pymatgen.core import Structure
-        except ImportError:
+        if importlib.util.find_spec("pymatgen") is None:
             pytest.skip("pymatgen not available")
 
     def test_normal_structure_no_close_contacts(self):
@@ -90,9 +89,7 @@ class TestHasCloseContactsPymatgen:
 class TestCheckSanityWithPymatgen:
     @pytest.fixture(autouse=True)
     def skip_if_no_pymatgen(self):
-        try:
-            from pymatgen.core import Structure
-        except ImportError:
+        if importlib.util.find_spec("pymatgen") is None:
             pytest.skip("pymatgen not available")
 
     def test_normal_structure_passes_with_pymatgen(self):

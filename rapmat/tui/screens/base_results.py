@@ -626,7 +626,7 @@ class BaseResultsScreen(ScreenBase):
         if result is None:
             self._show_message("No structure selected.")
             return
-        new_val = not (result.excluded is True)
+        new_val = result.excluded is not True
         try:
             self._state.store.set_structure_excluded(result.structure_id, new_val)
         except Exception as exc:

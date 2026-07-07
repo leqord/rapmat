@@ -15,8 +15,7 @@ from rapmat.tui.widgets.calc_fields import (
     setup_calculator_signals,
 )
 from rapmat.tui.widgets.form import (FormGroup, checkbox_field,
-                                     float_field, int_field, text_field,
-                                     tuple_field)
+                                     float_field, int_field, tuple_field)
 from rapmat.tui.widgets.progress import ProgressPanel
 
 

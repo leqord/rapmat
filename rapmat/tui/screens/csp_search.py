@@ -7,16 +7,9 @@ from rapmat.tui.router import ScreenRouter
 from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.dialog import ModalDialog
-from rapmat.tui.widgets.form import (FormGroup, checkbox_field, dropdown_field,
-                                     float_field, int_field, radio_field,
+from rapmat.tui.widgets.form import (FormGroup, dropdown_field, int_field,
                                      text_field)
 from rapmat.tui.widgets.progress import ProgressPanel
-
-
-def _calc_options() -> list[str]:
-    from rapmat.calculators import Calculators
-
-    return [c.value for c in Calculators]
 
 
 class CSPSearchScreen(ScreenBase):
@@ -91,9 +84,7 @@ class CSPSearchScreen(ScreenBase):
         try:
             from rapmat.utils.common import parse_formula
 
-            parts = parse_formula(val.strip())
-            if len(parts) > 2:
-                pass
+            parse_formula(val.strip())
         except Exception:
             return "Invalid formula (e.g. Al2O3)"
         return None
@@ -105,8 +96,6 @@ class CSPSearchScreen(ScreenBase):
 
     def _build_frame(self) -> urwid.Frame:
         self._form = self._build_form()
-
-        study_dd = self._form.get_widget("study")
 
         self._error_text = urwid.Text("")
 
@@ -182,15 +171,11 @@ class CSPSearchScreen(ScreenBase):
         fu_min = max(1, vals["fu_min"])
         fu_max = max(fu_min, vals["fu_max"])
         candidates = max(1, vals["candidates"])
-        base_run_name = vals["run_name"].strip() or f"run-{uuid.uuid4().hex[:8]}"
+        run_name = vals["run_name"].strip() or f"run-{uuid.uuid4().hex[:8]}"
         workers = max(1, vals["workers"])
-
-        is_grid_search = False
-        grid_step = 0.25
 
         formula_str = vals.get("formula", "")
         formula = parse_formula(formula_str) if formula_str else {}
-        elements = list(formula.keys())
 
         import random as _random
 
@@ -199,62 +184,15 @@ class CSPSearchScreen(ScreenBase):
             seed_val = _random.randint(1, 2**32 - 1)
         progress.log(f"Using seed: {seed_val}")
 
-        study_raw = vals["study"]
-        if study_raw.startswith("-"):
+        study_id = vals["study"]
+        if study_id.startswith("-"):
             raise ValueError("You must select a valid Study to start a run.")
-
-        study_id = study_raw
 
         study = store.get_study(study_id)
         if not study:
             raise ValueError(f"Study {study_id} no longer exists.")
 
-        domain = study.domain
-        search_dim = 3 if domain == "bulk" else 2
-
-        runs_to_queue = []
-        if is_grid_search:
-            el_A, el_B = elements[0], elements[1]
-            import numpy as np
-
-            ratios = np.arange(0.0, 1.0 + grid_step / 2, grid_step)
-            for x in ratios:
-                y = 1.0 - x
-
-                import math
-
-                def float_to_ratio(val, tol=1e-4):
-                    for i in range(1, 100):
-                        if abs(val * i - round(val * i)) < tol:
-                            return round(val * i), i
-                    return round(val * 100), 100
-
-                nx, dx = float_to_ratio(x)
-                ny, dy = float_to_ratio(y)
-                lcm = abs(dx * dy) // math.gcd(dx, dy)
-
-                int_x = int(nx * (lcm / dx))
-                int_y = int(ny * (lcm / dy))
-
-                # Simplify
-                common = math.gcd(int_x, int_y)
-                if common > 0:
-                    int_x //= common
-                    int_y //= common
-
-                sub_formula = {}
-                label = ""
-                if int_x > 0:
-                    sub_formula[el_A] = int_x
-                    label += f"{el_A}{int_x if int_x > 1 else ''}"
-                if int_y > 0:
-                    sub_formula[el_B] = int_y
-                    label += f"{el_B}{int_y if int_y > 1 else ''}"
-
-                sub_run_name = f"{base_run_name}-{label}"
-                runs_to_queue.append((sub_run_name, sub_formula))
-        else:
-            runs_to_queue.append((base_run_name, formula))
+        search_dim = 3 if study.domain == "bulk" else 2
 
         wid = uuid.uuid4().hex[:12]
 
@@ -265,112 +203,96 @@ class CSPSearchScreen(ScreenBase):
             if is_log:
                 progress.log(msg)
 
-        total_runs = len(runs_to_queue)
-        runs_created = []
+        progress.log(f"Queuing run '{run_name}'...")
 
-        for i, (run_name, run_formula) in enumerate(runs_to_queue):
-            progress.log(f"[{i+1}/{total_runs}] Queuing run '{run_name}'...")
+        run_config = {
+            "formula": formula,
+            "formula_units": [fu_min, fu_max],
+            "candidates_per_group": candidates,
+            "seed": seed_val,
+        }
 
-            run_config = {
-                "formula": run_formula,
-                "formula_units": [fu_min, fu_max],
-                "candidates_per_group": candidates,
-                "seed": seed_val,
-            }
+        store.create_run(
+            name=run_name,
+            study_id=study_id,
+            config=run_config,
+            worker_id=wid,
+        )
 
-            try:
-                store.create_run(
-                    name=run_name,
-                    study_id=study_id,
-                    config=run_config,
+        spg_total = 230 if search_dim == 3 else 80
+        placeholders = []
+        idx = 0
+        for fu in range(fu_min, fu_max + 1):
+            for spg in range(1, spg_total + 1):
+                for _ in range(candidates):
+                    idx += 1
+                    placeholders.append((f"{run_name}/{idx}", spg, fu))
+
+        store.add_generation_placeholders(run_name, placeholders)
+
+        cancel_flag = [False]
+
+        progress.log(f"Starting generation phase for {run_name}...")
+        try:
+            with workdir_context(None) as workdir_path:
+                progress.log(f"Working directory: {workdir_path}")
+
+                meta = store.get_run_metadata(run_name)
+                full_cfg = meta.search_config if meta else run_config
+
+                run_generation_loop(
+                    run_name=run_name,
+                    store=store,
+                    config=full_cfg,
                     worker_id=wid,
+                    workers=workers,
+                    progress_callback=_cb,
+                    cancel_flag=cancel_flag,
+                    log_callback=progress.log,
                 )
-            except Exception as e:
-                progress.log(f"Failed to create run {run_name}: {e}")
-                continue
 
-            spg_total = 230 if search_dim == 3 else 80
-            placeholders = []
-            idx = 0
-            for fu in range(fu_min, fu_max + 1):
-                for spg in range(1, spg_total + 1):
-                    for _ in range(candidates):
-                        idx += 1
-                        placeholders.append((f"{run_name}/{idx}", spg, fu))
+                if progress.cancelled or cancel_flag[0]:
+                    raise KeyboardInterrupt("Cancelled by user")
 
-            store.add_generation_placeholders(run_name, placeholders)
-            runs_created.append((run_name, run_config))
+                progress.log(
+                    "Generation complete. Initializing calculator for processing..."
+                )
+                store.set_run_status(run_name, "processing")
 
-        for i, (run_name, run_config) in enumerate(runs_created):
-            cancel_flag = [False]
-
-            progress.log(
-                f"[{i+1}/{len(runs_created)}] Starting generation phase for {run_name}..."
-            )
-            try:
-                with workdir_context(None) as workdir_path:
-                    progress.log(f"Working directory: {workdir_path}")
-
-                    meta = store.get_run_metadata(run_name)
-                    full_cfg = meta.search_config if meta else run_config
-
-                    run_generation_loop(
-                        run_name=run_name,
-                        store=store,
-                        config=full_cfg,
-                        worker_id=wid,
-                        workers=workers,
-                        progress_callback=_cb,
-                        cancel_flag=cancel_flag,
-                        log_callback=progress.log,
-                    )
-
-                    if progress.cancelled or cancel_flag[0]:
+                def _proc_cb(current, total, msg, is_log=True):
+                    if progress.cancelled:
+                        cancel_flag[0] = True
                         raise KeyboardInterrupt("Cancelled by user")
+                    progress.update(current, total, msg)
+                    if is_log:
+                        progress.log(msg)
 
-                    progress.log(
-                        "Generation complete. Initializing calculator for processing..."
-                    )
-                    store.set_run_status(run_name, "processing")
+                progress.log(f"Starting processing phase for {run_name}...")
 
-                    def _proc_cb(current, total, msg, is_log=True):
-                        if progress.cancelled:
-                            cancel_flag[0] = True
-                            raise KeyboardInterrupt("Cancelled by user")
-                        progress.update(current, total, msg)
-                        if is_log:
-                            progress.log(msg)
+                t0 = time.monotonic()
+                run_processing_loop(
+                    run_name=run_name,
+                    store=store,
+                    config=full_cfg,
+                    workdir_path=workdir_path,
+                    worker_id=wid,
+                    progress_callback=_proc_cb,
+                    cancel_flag=cancel_flag,
+                )
+                t1 = time.monotonic()
+                progress.log(
+                    f"Run '{run_name}' computation finished in {t1 - t0:.2f} seconds."
+                )
 
-                    progress.log(
-                        f"[{i+1}/{len(runs_created)}] Starting processing phase for {run_name}..."
-                    )
+                store.release_run(run_name, "completed")
+        except KeyboardInterrupt:
+            store.release_run(run_name, "interrupted")
+            raise
+        except Exception:
+            store.release_run(run_name, "failed")
+            raise
 
-                    t0 = time.monotonic()
-                    run_processing_loop(
-                        run_name=run_name,
-                        store=store,
-                        config=full_cfg,
-                        workdir_path=workdir_path,
-                        worker_id=wid,
-                        progress_callback=_proc_cb,
-                        cancel_flag=cancel_flag,
-                    )
-                    t1 = time.monotonic()
-                    progress.log(
-                        f"Run '{run_name}' computation finished in {t1 - t0:.2f} seconds."
-                    )
-
-                    store.release_run(run_name, "completed")
-            except KeyboardInterrupt:
-                store.release_run(run_name, "interrupted")
-                raise
-            except Exception:
-                store.release_run(run_name, "failed")
-                raise
-
-        if runs_to_queue:
-            self._state.active_run = runs_to_queue[-1][0]
-
+        self._state.active_run = run_name
         self._state.invalidate()
         progress.finish()
 

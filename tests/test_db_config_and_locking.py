@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta
 
 import pytest
-from ase.build import bulk
 
 from conftest import _BACKENDS, force_heartbeat, read_run_field
 from rapmat.db_config import (

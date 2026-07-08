@@ -7,6 +7,7 @@ from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.table import SortableTable
 from rapmat.utils import hardware
+from rapmat.utils.common import format_formula, format_timestamp
 
 
 def _format_run_status(counts: dict[str, int]) -> str:
@@ -31,12 +32,8 @@ def _format_run_status(counts: dict[str, int]) -> str:
 
 def _format_run_row(run: dict) -> list[str]:
     formula_map = SearchConfig.model_validate(run.get("config", {})).formula
-    formula = (
-        "".join(f"{el}{n}" if n > 1 else el for el, n in formula_map.items())
-        if formula_map
-        else "-"
-    )
-    ts = run.get("timestamp", "")[:16].replace("T", " ")
+    formula = format_formula(formula_map) if formula_map else "-"
+    ts = format_timestamp(run.get("timestamp", ""))
     status = run.get("_status_summary", "-")
     return [run.get("name", "-"), str(run.get("domain", "-")), formula, ts, status]
 

@@ -58,7 +58,7 @@ def run_processing_loop(
 
     candidates = store.get_unrelaxed_candidates(run_name)
 
-    relaxed_structures = []
+    n_relaxed = 0
 
     free_cuda_memory()
 
@@ -79,7 +79,7 @@ def run_processing_loop(
             progress_callback(counter, n_candidates, msg)
 
     def _run_loop():
-        nonlocal counter, discarded_sanity
+        nonlocal counter, discarded_sanity, n_relaxed
         nonlocal calculator
 
         for candidate in candidates:
@@ -182,7 +182,7 @@ def run_processing_loop(
                         atoms=relaxed_structure,
                         metadata=meta,
                     )
-                    relaxed_structures.append(relaxed_structure)
+                    n_relaxed += 1
                     break
 
                 except Exception as ex:
@@ -235,7 +235,6 @@ def run_processing_loop(
 
     _run_loop()
 
-    n_relaxed = len(relaxed_structures)
     pressure_msg = f" | Pressure: {pressure_gpa} GPa" if pressure_gpa > 0 else ""
     logger.info(
         "Done. Run: %s | Storage: %s%s | Relaxed: %d | Discarded (sanity): %d",
@@ -388,3 +387,90 @@ def run_generation_loop(
 
     _log(f"Generation finished: {generated} ok, {discarded} discarded, {errors} errors")
     return generated
+
+
+def execute_run(
+    run_name: str,
+    store,
+    config,
+    *,
+    worker_id: str,
+    workers: int = 1,
+    progress_callback: ProgressCallback | None = None,
+    log_callback=None,
+    cancel_flag: list[bool] | None = None,
+) -> None:
+    """Execute a claimed run to the finish.
+    """
+    import time
+
+    from rapmat.storage.status import RunStatus
+    from rapmat.utils.common import workdir_context
+
+    flag = cancel_flag if cancel_flag is not None else [False]
+
+    def _log(msg: str) -> None:
+        if log_callback:
+            log_callback(msg)
+
+    def _cb(current: int, total: int, message: str = "", is_log: bool = True) -> None:
+        if progress_callback is None:
+            if is_log and message:
+                _log(message)
+            return
+        try:
+            progress_callback(current, total, message, is_log=is_log)
+        except KeyboardInterrupt:
+            flag[0] = True
+            raise
+
+    try:
+        with workdir_context(None) as workdir_path:
+            _log(f"Working directory: {workdir_path}")
+
+            pending = store.get_pending_generation(run_name)
+            if pending:
+                _log(f"Generation phase: {len(pending)} placeholders pending...")
+                store.set_run_status(run_name, RunStatus.GENERATING)
+                run_generation_loop(
+                    run_name=run_name,
+                    store=store,
+                    config=config,
+                    worker_id=worker_id,
+                    workers=workers,
+                    progress_callback=_cb,
+                    cancel_flag=flag,
+                    log_callback=log_callback,
+                )
+                if flag[0]:
+                    raise KeyboardInterrupt("Cancelled by user")
+                _cb(
+                    0, 0,
+                    "Generation complete. Initializing calculator...",
+                )
+
+            store.set_run_status(run_name, RunStatus.PROCESSING)
+            _log(f"Starting processing phase for {run_name}...")
+
+            t0 = time.monotonic()
+            run_processing_loop(
+                run_name=run_name,
+                store=store,
+                config=config,
+                workdir_path=workdir_path,
+                worker_id=worker_id,
+                progress_callback=_cb,
+                cancel_flag=flag,
+            )
+            _log(
+                f"Run '{run_name}' computation finished in "
+                f"{time.monotonic() - t0:.2f} seconds."
+            )
+
+            store.release_run(run_name, RunStatus.COMPLETED)
+    except KeyboardInterrupt:
+        store.release_run(run_name, RunStatus.INTERRUPTED)
+        raise
+    except Exception:
+        store.release_run(run_name, RunStatus.FAILED)
+        raise

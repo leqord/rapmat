@@ -27,6 +27,7 @@ import json
 
 from rapmat.storage import SQLiteStore
 from rapmat.storage.base import StructureStore
+from rapmat.storage.status import StructureStatus
 
 
 def add_generated_candidate(
@@ -56,7 +57,7 @@ def add_relaxed_structure(
 
     store.update_structure(
         struct_id,
-        "relaxed",
+        StructureStatus.RELAXED,
         atoms=atoms,
         metadata={
             "energy_per_atom": energy_per_atom,

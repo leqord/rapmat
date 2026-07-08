@@ -1,11 +1,13 @@
 from rapmat.core.config import SearchConfig
 from rapmat.core.entities import ResultRow
+from rapmat.storage.status import StructureStatus
 from rapmat.tui.keymap import KeyBinding
 from rapmat.tui.router import ScreenRouter
 from rapmat.tui.screens.base_results import (
     BaseResultsScreen,
     _dyn_stability,
     _flags_str,
+    _yes_no,
 )
 from rapmat.tui.state import AppState
 
@@ -38,7 +40,7 @@ class ResultsScreen(BaseResultsScreen):
         self._symprec = self._get_symprec()
 
         records = store.get_structures(
-            run_name, status="relaxed", symprec=self._symprec,
+            run_name, status=StructureStatus.RELAXED, symprec=self._symprec,
             progress_callback=progress_callback,
         )
 
@@ -96,10 +98,7 @@ class ResultsScreen(BaseResultsScreen):
         return cols
 
     def _format_row(self, result: ResultRow) -> list[str]:
-        full_id = str(result.structure_id)
-        short_id = full_id.split("/")[-1] if "/" in full_id else full_id
-        if len(short_id) > 10:
-            short_id = short_id[:10]
+        short_id = result.short_id[:10]
 
         if self._pressure_gpa > 0:
             h = result.enthalpy_per_atom
@@ -122,8 +121,7 @@ class ResultsScreen(BaseResultsScreen):
             t = result.thickness
             row.append("" if t is None else f"{t:.2f}")
         if self._show_dynamical_stability:
-            dyn = _dyn_stability(result, self._phonon_cutoff)
-            row.append("Yes" if dyn is True else ("No" if dyn is False else "N/A"))
+            row.append(_yes_no(_dyn_stability(result, self._phonon_cutoff)))
         if self._show_flags_col:
             row.append(_flags_str(result))
 

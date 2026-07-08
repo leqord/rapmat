@@ -43,9 +43,6 @@ class PhononDispersionScreen(ScreenBase):
             ),
         ]
 
-    def esc_label(self) -> str:
-        return "Cancel" if self._running else "Back"
-
     # ------------------------------------------------------------------ #
     #  Layout
     # ------------------------------------------------------------------ #
@@ -172,16 +169,15 @@ class PhononDispersionScreen(ScreenBase):
         from ase import Atoms
         from ase.io import read as read_ase_structure
 
-        from rapmat.calculators import Calculators
+        from rapmat.calculators import Calculators, LogCalcCallback
         from rapmat.calculators.factory import load_calculator
         from rapmat.core.phonon import (structure_calculate_phonons,
                                         structure_has_imag_phonon_freq)
         from rapmat.utils.common import workdir_context
 
-        class _TaskCalcCallback:
-            def on_status(self, message: str) -> None:
-                progress.log(message)
-                progress.update(1, 5, message)
+        def _calc_status(message: str) -> None:
+            progress.log(message)
+            progress.update(1, 5, message)
 
         structure_file = vals["structure_file"].strip()
         calculator_name = vals["calculator"]
@@ -208,7 +204,7 @@ class PhononDispersionScreen(ScreenBase):
                 Calculators(calculator_name),
                 wdir,
                 config=vals.get("calculator_config_dict", {}),
-                callback=_TaskCalcCallback(),
+                callback=LogCalcCallback(_calc_status),
             )
             structure.calc = calculator
 
@@ -318,19 +314,3 @@ class PhononDispersionScreen(ScreenBase):
         self._running = False
         self._progress_panel.set_finished(False, f"Error: {error}")
 
-    # ------------------------------------------------------------------ #
-    #  Key handling
-    # ------------------------------------------------------------------ #
-
-    def keypress(self, size: tuple, key: str) -> str | None:
-        if super().keypress(size, key) is None:
-            return None
-        if key == "esc":
-            if self._running:
-                if self._task:
-                    self._task.cancel()
-                    self._progress_panel.set_cancelling()
-                return None
-            self._router.pop()
-            return None
-        return key

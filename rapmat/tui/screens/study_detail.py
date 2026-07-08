@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import urwid
 
 from rapmat.tui.keymap import KeyBinding
@@ -6,6 +8,10 @@ from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.config_grid import build_config_grid
 from rapmat.tui.widgets.table import SortableTable
+from rapmat.utils.common import format_formula, format_timestamp
+
+if TYPE_CHECKING:
+    from rapmat.core.entities import RunMetadata
 
 _RUN_COLS = [
     ("Run Name", 28),
@@ -25,8 +31,7 @@ def _classify_run(run: "RunMetadata", study_elements: list[str]) -> str:
 
 
 def _formula_str(run: "RunMetadata") -> str:
-    formula = run.search_config.formula
-    return "".join(f"{el}{n}" if n > 1 else el for el, n in formula.items())
+    return format_formula(run.search_config.formula)
 
 
 class StudyDetailScreen(ScreenBase):
@@ -104,7 +109,7 @@ class StudyDetailScreen(ScreenBase):
         from rapmat.utils.common import parse_system
 
         elements = parse_system(study.system)
-        ts = study.timestamp[:16].replace("T", " ")
+        ts = format_timestamp(study.timestamp)
 
         info_text = urwid.Text(
             [
@@ -231,41 +236,38 @@ class StudyDetailScreen(ScreenBase):
         self._router.push(ResultsScreen(self._state, self._router))
 
     def _on_unlock_run(self, run_name: str) -> None:
-        self._state.store.release_run(run_name, "pending")
+        from rapmat.storage.status import RunStatus
+
+        self._state.store.release_run(run_name, RunStatus.PENDING)
         if self._placeholder:
             self._placeholder.original_widget = self._build_widget()
 
-    def _open_delete_modal(self, run_name: str) -> None:
-        if self._placeholder is None:
-            return
+    def _dialog_host_get(self) -> "urwid.Widget | None":
+        return (
+            self._placeholder.original_widget
+            if self._placeholder is not None
+            else None
+        )
 
+    def _dialog_host_set(self, widget: urwid.Widget) -> None:
+        self._placeholder.original_widget = widget
+
+    def _open_delete_modal(self, run_name: str) -> None:
         run_data = self._state.store.get_run_metadata(run_name)
         status = run_data.run_status if run_data else "pending"
         worker_id = run_data.worker_id if run_data else None
         is_active = worker_id and status in ("generating", "processing")
 
-        from rapmat.tui.widgets.dialog import ModalDialog
-
-        current_body = self._placeholder.original_widget
-
-        def _on_close(confirmed: bool) -> None:
-            if self._placeholder is not None:
-                self._placeholder.original_widget = current_body
-                if confirmed:
-                    self._state.store.delete_run(run_name)
-                    self._placeholder.original_widget = self._build_widget()
-
-        msg = f"Are you sure you want to permanently delete run '{run_name}' and all its structures?"
+        msg = f"Are you sure you want to permanently delete run '{run_name}'?"
         if is_active:
-            msg += "\n\nWARNING: This run appears to be ACTIVE (processed by worker {worker_id[:4]}). Deleting it may cause worker errors."
+            msg += f"\n\nWARNING: This run appears to be claimed and being processed right now by the {worker_id[:4]} worker"
 
-        dlg = ModalDialog.confirm(
-            title="Delete Run",
-            message=msg,
-            parent=current_body,
-            on_close=_on_close,
-        )
-        self._placeholder.original_widget = dlg
+        def _confirmed() -> None:
+            self._state.store.delete_run(run_name)
+            if self._placeholder is not None:
+                self._placeholder.original_widget = self._build_widget()
+
+        self.confirm_dialog("Delete Run", msg, _confirmed)
 
     def _focused_run_name(self) -> str | None:
         if self._table is None:

@@ -9,6 +9,7 @@ from rapmat.tui.screens.base_results import (
     BaseResultsScreen,
     _dyn_stability,
     _flags_str,
+    _yes_no,
 )
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.dialog import ModalDialog
@@ -261,8 +262,7 @@ class PhaseAnalysisScreen(BaseResultsScreen):
             t = result.thickness
             row.append("" if t is None else f"{t:.2f}")
         if self._show_dynamical_stability:
-            dyn = _dyn_stability(result, self._phonon_cutoff)
-            row.append("Yes" if dyn is True else ("No" if dyn is False else ""))
+            row.append(_yes_no(_dyn_stability(result, self._phonon_cutoff), na=""))
         return row
 
     def _refresh_after_membership_change(self) -> None:
@@ -348,66 +348,57 @@ class PhaseAnalysisScreen(BaseResultsScreen):
             self._start_async_fetch()
 
     def _open_cutoff_modal(self) -> None:
-        if self._main_frame is None:
-            return
+        def _factory(parent, close):
+            def _on_save(val_str: str) -> None:
+                close()
+                try:
+                    cutoff = float(val_str)
+                    self._hull_cutoff = max(0.0, cutoff)
+                    self._show_all = False
+                    self._start_async_fetch()
+                except ValueError:
+                    self._show_message("Invalid cutoff: must be a number.")
 
-        current_body = self._main_frame.body
+            return ModalDialog.input_text(
+                title="Hull Cutoff",
+                message="Enter Energy Above Hull cutoff (eV/A):",
+                parent=parent,
+                on_save=_on_save,
+                on_cancel=close,
+                default=f"{self._hull_cutoff:.2f}",
+            )
 
-        def _on_save(val_str: str) -> None:
-            self._main_frame.body = current_body
-            try:
-                cutoff = float(val_str)
-                self._hull_cutoff = max(0.0, cutoff)
-                self._show_all = False
-                self._start_async_fetch()
-            except ValueError:
-                self._show_message("Invalid cutoff - must be a number.")
-
-        def _cancel() -> None:
-            self._main_frame.body = current_body
-
-        dlg = ModalDialog.input_text(
-            title="Hull Cutoff",
-            message="Enter Energy Above Hull cutoff (eV/A):",
-            parent=current_body,
-            on_save=_on_save,
-            on_cancel=_cancel,
-            default=f"{self._hull_cutoff:.2f}",
-        )
-        self._main_frame.body = dlg
+        self.show_dialog(_factory)
 
     def _open_save_plot_modal(self) -> None:
-        if self._system_size != 2 or self._main_frame is None:
+        if self._system_size != 2:
             return
 
-        current_body = self._main_frame.body
+        def _factory(parent, close):
+            def _do_save(path_str: str) -> None:
+                close()
+                plot_path = Path(path_str)
+                try:
+                    from rapmat.core.hull import plot_binary_hull
 
-        def _do_save(path_str: str) -> None:
-            self._main_frame.body = current_body
-            plot_path = Path(path_str)
-            try:
-                from rapmat.core.hull import plot_binary_hull
+                    plot_binary_hull(
+                        self._results,
+                        self._study_system,
+                        save_path=plot_path,
+                        show=False,
+                        use_enthalpy=self._use_enthalpy,
+                    )
+                    self._show_message(f"Plot saved to {plot_path}")
+                except Exception as exc:
+                    self._show_message(f"Save failed: {exc}")
 
-                plot_binary_hull(
-                    self._results,
-                    self._study_system,
-                    save_path=plot_path,
-                    show=False,
-                    use_enthalpy=self._use_enthalpy,
-                )
-                self._show_message(f"Plot saved to {plot_path}")
-            except Exception as exc:
-                self._show_message(f"Save failed: {exc}")
+            return ModalDialog.input_text(
+                title="Save Hull Plot",
+                message="Enter file path for the hull plot:",
+                parent=parent,
+                on_save=_do_save,
+                on_cancel=close,
+                default="hull.png",
+            )
 
-        def _cancel() -> None:
-            self._main_frame.body = current_body
-
-        dlg = ModalDialog.input_text(
-            title="Save Hull Plot",
-            message="Enter file path for the hull plot:",
-            parent=current_body,
-            on_save=_do_save,
-            on_cancel=_cancel,
-            default="hull.png",
-        )
-        self._main_frame.body = dlg
+        self.show_dialog(_factory)

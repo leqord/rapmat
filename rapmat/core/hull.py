@@ -9,6 +9,7 @@ from pymatgen.core import Composition
 
 from rapmat.core.entities import ResultRow, Structure
 from rapmat.storage.base import StructureStore
+from rapmat.storage.status import StructureStatus
 from rapmat.utils.common import parse_system
 
 # ------------------------------------------------------------------ #
@@ -48,7 +49,9 @@ def collect_study_structures(
     structures: list[Structure] = []
     for run in store.get_study_runs(study_id):
         structures.extend(
-            store.get_structures(run.name, status="relaxed", symprec=symprec)
+            store.get_structures(
+                run.name, status=StructureStatus.RELAXED, symprec=symprec
+            )
         )
     return structures, study.system, use_enthalpy
 
@@ -192,7 +195,7 @@ def build_phase_diagram(
     for sd in structure_data:
         comp = Composition(sd.formula)
         entry = PDEntry(comp, sd.effective_per_atom * comp.num_atoms)
-        sd.energy_above_hull = pd.get_e_above_hull(entry)
+        sd.energy_above_hull = float(pd.get_e_above_hull(entry))
         sd.is_stable = sd.energy_above_hull < 1e-6
 
     if not show_all:

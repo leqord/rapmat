@@ -23,7 +23,7 @@ _LEGACY_MODES = ("local", "remote")
 
 
 def load_db_config() -> dict:
-    general: dict | None = None
+    general: dict | None = None # TODO: move to Optional[X]
 
     if _DB_CONFIG_FILE.is_file():
         with open(_DB_CONFIG_FILE, "rb") as f:

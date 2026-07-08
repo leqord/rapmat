@@ -1,4 +1,4 @@
-"""Tests for the declarative keymap."""
+"""Tests for the keymap."""
 
 import sys
 
@@ -194,6 +194,113 @@ class TestScreenBaseFooter:
     def test_global_input_ignores_mouse_events(self):
         app, _state = _make_app()
         app._global_input(("mouse press", 4, 10, 10))  # must not raise anything
+
+
+class _FakeRunningTask:
+    is_running = True
+
+    def __init__(self):
+        self.cancelled = False
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class TestScreenBaseEsc:
+    def test_esc_cancels_running_task(self):
+        app, _state = _make_app()
+        screen = app._router.current
+
+        cancelling = []
+
+        class _Panel:
+            def set_cancelling(self):
+                cancelling.append(True)
+
+        task = _FakeRunningTask()
+        screen._task = task
+        screen._progress_panel = _Panel()
+
+        assert screen.keypress((), "esc") is None
+        assert task.cancelled is True
+        assert cancelling == [True]
+
+    def test_esc_without_task_falls_through(self):
+        app, _state = _make_app()
+        screen = app._router.current
+        assert screen.keypress((), "esc") == "esc"
+
+    def test_esc_label_reflects_running_task(self):
+        from rapmat.tui.screens.base import ScreenBase
+
+        app, state = _make_app()
+        screen = ScreenBase(state, app._router)
+        assert screen.esc_label() == "Back"
+        screen._task = _FakeRunningTask()
+        assert screen.esc_label() == "Cancel"
+
+
+def _host_screen(app, state):
+    from rapmat.tui.screens.base import ScreenBase
+
+    class _HostScreen(ScreenBase):
+        def __init__(self, st, router):
+            super().__init__(st, router)
+            self.body = urwid.SolidFill(" ")
+
+        def _dialog_host_get(self):
+            return self.body
+
+        def _dialog_host_set(self, widget):
+            self.body = widget
+
+    return _HostScreen(state, app._router)
+
+
+class TestScreenBaseDialogs:
+    def test_show_dialog_opens_and_close_restores(self):
+        app, state = _make_app()
+        screen = _host_screen(app, state)
+        base = screen.body
+        sentinel = urwid.SolidFill("X")
+
+        close = screen.show_dialog(lambda parent, close: sentinel)
+        assert screen.body is sentinel
+        close()
+        assert screen.body is base
+
+    def test_show_dialog_no_host_returns_none(self):
+        app, state = _make_app()
+        screen = _host_screen(app, state)
+        screen.body = None
+        assert screen.show_dialog(lambda parent, close: parent) is None
+
+    def test_confirm_dialog_cancel_restores_without_firing(self):
+        from rapmat.tui.widgets.dialog import ModalDialog
+
+        app, state = _make_app()
+        screen = _host_screen(app, state)
+        base = screen.body
+        fired = []
+
+        screen.confirm_dialog("T", "M", lambda: fired.append(True))
+        assert isinstance(screen.body, ModalDialog)
+        screen.body._esc_handler()
+        assert screen.body is base
+        assert fired == []
+
+    def test_confirm_dialog_yes_fires_and_restores(self):
+        app, state = _make_app()
+        screen = _host_screen(app, state)
+        base = screen.body
+        fired = []
+
+        screen.confirm_dialog("T", "M", lambda: fired.append(True))
+        dialog = screen.body
+        dialog.render((60, 10), focus=True)
+        dialog.keypress((60, 10), "enter")
+        assert fired == [True]
+        assert screen.body is base
 
 
 # ---------------------------------------------------------------------------

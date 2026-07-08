@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -28,6 +29,26 @@ def _dyn_stability(result: "ResultRow", phonon_cutoff: float | None) -> Optional
         except (TypeError, ValueError):
             pass
     return result.dynamical_stability
+
+
+@dataclass
+class SaveOptions:
+    fmt: str
+    directory: str
+    cell_mode: str
+    save_all: bool
+    version: str = "relaxed"
+    symprec: float = 1e-3
+    table_export: str | None = "txt"
+    save_dispersion: bool = False
+
+
+def _yes_no(val: bool | None, na: str = "N/A") -> str:
+    if val is True:
+        return "Yes"
+    if val is False:
+        return "No"
+    return na
 
 
 def _row_attr(result: "ResultRow") -> str:
@@ -141,8 +162,11 @@ class _SaveDialog(ModalDialog):
             )
             self._emit("close", True)
             on_save(
-                fmt, directory, cell_mode, save_all, version, symprec,
-                table_export, save_dispersion,
+                SaveOptions(
+                    fmt=fmt, directory=directory, cell_mode=cell_mode,
+                    save_all=save_all, version=version, symprec=symprec,
+                    table_export=table_export, save_dispersion=save_dispersion,
+                )
             )
 
         def _cancel(_btn: urwid.Button) -> None:
@@ -259,16 +283,9 @@ class BaseResultsScreen(ScreenBase):
             return
 
         def _worker(progress) -> None:
-            def _cb(
-                current: int, total: int, message: str = "", is_log: bool = False
-            ) -> None:
-                if progress.cancelled:
-                    raise KeyboardInterrupt("Cancelled by user")
-                progress.update(current=current, total=total, message=message)
-                if is_log and message:
-                    progress.log(message)
-
-            self._fetch_data(progress_callback=_cb)
+            self._fetch_data(
+                progress_callback=progress.as_callback(default_is_log=False)
+            )
 
         def _on_progress(current: int, total: int, message: str) -> None:
             panel.set_progress(current, total, message)
@@ -377,6 +394,12 @@ class BaseResultsScreen(ScreenBase):
 
     def _attr_fn(self, result: "ResultRow") -> str:
         return _row_attr(result)
+
+    def _dialog_host_get(self) -> "urwid.Widget | None":
+        return self._main_frame.body if self._main_frame is not None else None
+
+    def _dialog_host_set(self, widget: urwid.Widget) -> None:
+        self._main_frame.body = widget
 
     def _build_frame(self) -> urwid.Frame:
         cols = self._columns_def()
@@ -545,8 +568,7 @@ class BaseResultsScreen(ScreenBase):
 
             if self._show_dynamical_stability:
                 dyn = _dyn_stability(result, self._phonon_cutoff)
-                dyn_str = "Yes" if dyn is True else ("No" if dyn is False else "N/A")
-                add_cell("Dyn. Stability", dyn_str)
+                add_cell("Dyn. Stability", _yes_no(dyn))
 
             min_freq = result.min_phonon_freq
             if min_freq is not None:
@@ -626,7 +648,7 @@ class BaseResultsScreen(ScreenBase):
         if result is None:
             self._show_message("No structure selected.")
             return
-        new_val = not (result.excluded is True)
+        new_val = result.excluded is not True
         try:
             self._state.store.set_structure_excluded(result.structure_id, new_val)
         except Exception as exc:
@@ -650,8 +672,6 @@ class BaseResultsScreen(ScreenBase):
         )
 
     def _action_thickness(self) -> None:
-        if self._main_frame is None:
-            return
         if not self._show_thickness:
             self._show_message("No thickness data available for this run.")
             return
@@ -668,44 +688,42 @@ class BaseResultsScreen(ScreenBase):
             label_width=18,
         )
 
-        current_body = self._main_frame.body
+        def _factory(parent, close):
+            def _on_apply() -> None:
+                vals = dlg.validated_values()
+                if vals is None:
+                    return
+                cutoff = float(vals.get("cutoff", 0.0))
+                close()
+                if cutoff > 0:
+                    self._thickness_cutoff = cutoff
+                    self._hide_thick = True
+                    self._rebuild_table()
+                    self._show_message(f"Hiding thickness > {cutoff:.2f} Å.")
+                else:
+                    self._thickness_cutoff = None
+                    self._hide_thick = False
+                    self._rebuild_table()
+                    self._show_message("Showing all thicknesses.")
 
-        def _close() -> None:
-            self._main_frame.body = current_body
-
-        def _on_apply() -> None:
-            vals = dlg.validated_values()
-            if vals is None:
-                return
-            cutoff = float(vals.get("cutoff", 0.0))
-            _close()
-            if cutoff > 0:
-                self._thickness_cutoff = cutoff
-                self._hide_thick = True
-                self._rebuild_table()
-                self._show_message(f"Hiding thickness > {cutoff:.2f} Å.")
-            else:
+            def _on_clear() -> None:
+                close()
                 self._thickness_cutoff = None
                 self._hide_thick = False
                 self._rebuild_table()
                 self._show_message("Showing all thicknesses.")
 
-        def _on_clear() -> None:
-            _close()
-            self._thickness_cutoff = None
-            self._hide_thick = False
-            self._rebuild_table()
-            self._show_message("Showing all thicknesses.")
+            dlg = FormDialog(
+                "Thickness Filter",
+                form,
+                parent,
+                [("Apply", _on_apply), ("Clear", _on_clear), ("Cancel", close)],
+                section="Thickness Filter",
+                on_cancel=close,
+            )
+            return dlg
 
-        dlg = FormDialog(
-            "Thickness Filter",
-            form,
-            current_body,
-            [("Apply", _on_apply), ("Clear", _on_clear), ("Cancel", _close)],
-            section="Thickness Filter",
-            on_cancel=_close,
-        )
-        self._main_frame.body = dlg
+        self.show_dialog(_factory)
 
     def _relabel_spg(self) -> None:
         """Re-derive spacegroup labels in memory at the current symprec.
@@ -724,9 +742,6 @@ class BaseResultsScreen(ScreenBase):
         return None
 
     def _action_options(self) -> None:
-        if self._main_frame is None:
-            return
-
         from rapmat.tui.widgets.form import FormGroup, float_field
 
         current = self._symprec if self._symprec is not None else self._get_symprec()
@@ -738,40 +753,38 @@ class BaseResultsScreen(ScreenBase):
             label_width=20,
         )
 
-        current_body = self._main_frame.body
+        def _factory(parent, close):
+            def _on_apply() -> None:
+                vals = dlg.validated_values()
+                if vals is None:
+                    return
+                value = float(vals.get("symprec", current))
+                close()
+                self._symprec = value
+                self._relabel_spg()
+                extra_msg = self._apply_extra_options(vals)
+                self._rebuild_table()
+                if self._table is not None:
+                    self._update_details(self._table.get_focused_row())
+                self._persist_symprec(value)
+                self._show_message(
+                    extra_msg or f"SG labels recomputed at symprec={value:g}."
+                )
 
-        def _close() -> None:
-            self._main_frame.body = current_body
-
-        def _on_apply() -> None:
-            vals = dlg.validated_values()
-            if vals is None:
-                return
-            value = float(vals.get("symprec", current))
-            _close()
-            self._symprec = value
-            self._relabel_spg()
-            extra_msg = self._apply_extra_options(vals)
-            self._rebuild_table()
-            if self._table is not None:
-                self._update_details(self._table.get_focused_row())
-            self._persist_symprec(value)
-            self._show_message(
-                extra_msg or f"SG labels recomputed at symprec={value:g}."
+            dlg = FormDialog(
+                "Options",
+                form,
+                parent,
+                [("Apply", _on_apply), ("Cancel", close)],
+                section="Options",
+                on_cancel=close,
             )
+            return dlg
 
-        dlg = FormDialog(
-            "Options",
-            form,
-            current_body,
-            [("Apply", _on_apply), ("Cancel", _close)],
-            section="Options",
-            on_cancel=_close,
-        )
-        self._main_frame.body = dlg
+        self.show_dialog(_factory)
 
     def _action_save(self) -> None:
-        if self._table is None or self._main_frame is None:
+        if self._table is None:
             return
         result = self._table.get_focused_row()
         if result is None:
@@ -785,89 +798,72 @@ class BaseResultsScreen(ScreenBase):
         num_filtered = len(filtered_results)
         has_initial = any(r.initial_atoms is not None for r in self._results)
 
-        current_body = self._main_frame.body
-
-        def _on_save(
-            fmt: str, directory: str, cell_mode: str, save_all: bool,
-            version: str = "relaxed", symprec: float = 1e-3,
-            table_export: str | None = "txt", save_dispersion: bool = False,
-        ) -> None:
-            self._main_frame.body = current_body
-            if not save_all:
-                self._do_save(
-                    result, fmt, directory, cell_mode,
-                    quiet=False, version=version, symprec=symprec,
-                    save_dispersion=save_dispersion,
-                )
-            else:
-                success_count = 0
-                for res in filtered_results:
-                    if res.atoms is None:
-                        continue
-                    if self._do_save(
-                        res, fmt, directory, cell_mode,
-                        quiet=True, version=version, symprec=symprec,
-                        save_dispersion=save_dispersion,
-                    ):
-                        success_count += 1
-                self._show_message(
-                    f"Saved {success_count}/{num_filtered} structures to {directory}"
-                )
-            if table_export:
-                self._export_results_table(
-                    filtered_results, directory, table_export,
-                )
-
-        def _on_cancel() -> None:
-            self._main_frame.body = current_body
-
         label = self._save_subdir()
         default_dir = (
             str(Path.cwd() / f"saved_{label}") if label else str(Path.cwd())
         )
 
-        save_dlg = _SaveDialog(
-            current_body, _on_save, num_filtered=num_filtered,
-            default_dir=default_dir, has_initial=has_initial,
-            default_symprec=(
-                self._symprec if self._symprec is not None else self._get_symprec()
-            ),
-            has_phonon=self._show_dynamical_stability,
-        )
-        urwid.connect_signal(
-            save_dlg, "close", lambda _w, ok: _on_cancel() if not ok else None
-        )
-        self._main_frame.body = save_dlg
+        def _factory(parent, close):
+            def _on_save(opts: SaveOptions) -> None:
+                close()
+                if not opts.save_all:
+                    self._do_save(result, opts, quiet=False)
+                else:
+                    success_count = 0
+                    for res in filtered_results:
+                        if res.atoms is None:
+                            continue
+                        if self._do_save(res, opts, quiet=True):
+                            success_count += 1
+                    self._show_message(
+                        f"Saved {success_count}/{num_filtered} structures "
+                        f"to {opts.directory}"
+                    )
+                if opts.table_export:
+                    self._export_results_table(
+                        filtered_results, opts.directory, opts.table_export,
+                    )
+
+            save_dlg = _SaveDialog(
+                parent, _on_save, num_filtered=num_filtered,
+                default_dir=default_dir, has_initial=has_initial,
+                default_symprec=(
+                    self._symprec if self._symprec is not None else self._get_symprec()
+                ),
+                has_phonon=self._show_dynamical_stability,
+            )
+            urwid.connect_signal(
+                save_dlg, "close", lambda _w, ok: close() if not ok else None
+            )
+            return save_dlg
+
+        self.show_dialog(_factory)
 
     def _do_save(
         self,
         result: "ResultRow",
-        fmt: str,
-        directory: str,
-        cell_mode: str = "As-is",
+        opts: SaveOptions,
+        *,
         quiet: bool = False,
-        version: str = "relaxed",
-        symprec: float = 1e-3,
-        save_dispersion: bool = False,
     ) -> bool:
         from rapmat.core.export import save_structure
 
-        if version == "initial" and result.initial_atoms is not None:
+        if opts.version == "initial" and result.initial_atoms is not None:
             atoms = result.initial_atoms
         else:
             atoms = result.atoms
         if atoms is None:
             return False
         ident = self._save_ident(result).replace("/", "_")
-        prefix = "initial_" if version == "initial" else ""
+        prefix = "initial_" if opts.version == "initial" else ""
         try:
             out_path = save_structure(
-                atoms, directory, ident, fmt,
-                cell_mode=cell_mode, symprec=symprec, prefix=prefix,
+                atoms, opts.directory, ident, opts.fmt,
+                cell_mode=opts.cell_mode, symprec=opts.symprec, prefix=prefix,
             )
-            if save_dispersion:
+            if opts.save_dispersion:
                 self._save_dispersion_plot(
-                    result, Path(directory) / f"dispersion_{ident}.png"
+                    result, Path(opts.directory) / f"dispersion_{ident}.png"
                 )
             if not quiet:
                 self._show_message(f"Saved: {out_path}")
@@ -969,22 +965,14 @@ class BaseResultsScreen(ScreenBase):
             ),
         ]
 
-    def keypress(self, size: tuple, key: str) -> str | None:
-        if super().keypress(size, key) is None:
-            return None
-        if key == "esc":
-            if self._search_query:
-                self._search_query = ""
-                self._rebuild_table()
-                self._show_message("")
-                return None
-            if self._phonon_task is not None:
-                self._phonon_task.cancel()
-            if self._loading_task is not None:
-                self._loading_task.cancel()
-            self._router.pop()
-            return None
-        return key
+    def _on_esc(self) -> bool:
+        if self._search_query:
+            self._search_query = ""
+            self._rebuild_table()
+            self._show_message("")
+            return True
+
+        return super()._on_esc()
 
     def _action_phonon(self) -> None:
         if self._main_frame is None:
@@ -1030,66 +1018,52 @@ class BaseResultsScreen(ScreenBase):
 
         setup_calculator_signals(form)
 
-        current_body = self._main_frame.body
+        def _factory(parent, close):
+            def _on_submit() -> None:
+                vals = dlg.validated_values()
+                if vals is None:
+                    return
 
-        def _close() -> None:
-            self._main_frame.body = current_body
+                calc_config_dict, toml_err = parse_toml_config(vals)
+                if toml_err:
+                    dlg.set_error(toml_err)
+                    return
+                vals["calculator_config_dict"] = calc_config_dict
 
-        def _on_submit() -> None:
-            vals = dlg.validated_values()
-            if vals is None:
-                return
+                close()
+                self._start_phonon_task(vals)
 
-            calc_config_dict, toml_err = parse_toml_config(vals)
-            if toml_err:
-                dlg.set_error(toml_err)
-                return
-            vals["calculator_config_dict"] = calc_config_dict
+            def _on_clear() -> None:
+                close()
+                self._confirm_clear_phonons()
 
-            _close()
-            self._start_phonon_task(vals)
+            dlg = FormDialog(
+                "Dynamical stability",
+                form,
+                parent,
+                [
+                    ("Run Phonons", _on_submit),
+                    ("Clear results", _on_clear),
+                    ("Cancel", close),
+                ],
+                on_cancel=close,
+                width=60,
+                min_width=50,
+            )
+            return dlg
 
-        def _on_clear() -> None:
-            _close()
-            self._confirm_clear_phonons()
-
-        dlg = FormDialog(
-            "Dynamical stability",
-            form,
-            current_body,
-            [
-                ("Run Phonons", _on_submit),
-                ("Clear results", _on_clear),
-                ("Cancel", _close),
-            ],
-            on_cancel=_close,
-            width=60,
-            min_width=50,
-        )
-        self._main_frame.body = dlg
+        self.show_dialog(_factory)
 
     def _confirm_clear_phonons(self) -> None:
-        if self._main_frame is None:
-            return
         if not self._show_dynamical_stability:
             self._show_message("No phonon results to clear.")
             return
 
-        current_body = self._main_frame.body
-
-        def _on_close(ok: bool) -> None:
-            self._main_frame.body = current_body
-            if ok:
-                self._clear_phonon_results()
-
-        dlg = ModalDialog.confirm(
+        self.confirm_dialog(
             "Clear phonon results",
-            "Delete all stored phonon results (min frequencies and dispersion "
-            "data) for this view? This cannot be undone.",
-            current_body,
-            _on_close,
+            "Delete all stored phonon data for this view?",
+            self._clear_phonon_results,
         )
-        self._main_frame.body = dlg
 
     def _start_phonon_task(self, vals: dict) -> None:
         if self._main_frame is None or self._body_pile is None:
@@ -1138,15 +1112,6 @@ class BaseResultsScreen(ScreenBase):
         )
 
         def _worker(progress) -> None:
-            def _cb(
-                current: int, total: int, message: str, is_log: bool = True
-            ) -> None:
-                if progress.cancelled:
-                    raise KeyboardInterrupt("Cancelled by user")
-                progress.update(current=current, total=total, message=message)
-                if is_log:
-                    progress.log(message)
-
             compute_dynamical_stability_for_results(
                 results=results_snapshot,
                 phonon_top=top_n,
@@ -1157,7 +1122,7 @@ class BaseResultsScreen(ScreenBase):
                 phonon_calculator=calc_enum,
                 store=store,
                 calculator_config=calc_config,
-                progress_callback=_cb,
+                progress_callback=progress.as_callback(),
                 symprec=phonon_symprec,
                 reduce_primitive=reduce_prim,
                 run_name=getattr(self, "_run_name", None),

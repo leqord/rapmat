@@ -232,7 +232,7 @@ def test_build_phase_diagram_stable_and_unstable(hull_store):
 
     # Al3Cu should be unstable (above hull)
     al3cu = by_formula["Al3Cu"]
-    assert al3cu.is_stable == False
+    assert al3cu.is_stable is False
     assert al3cu.energy_above_hull > 0.1
     assert al3cu.formation_energy == pytest.approx(0.25, abs=1e-4)
     assert al3cu.composition_frac == pytest.approx(0.25, abs=1e-4)

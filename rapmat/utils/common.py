@@ -37,6 +37,15 @@ def format_system(elements: list[str]) -> str:
     return "-".join(sorted(set(elements)))
 
 
+def format_formula(formula: dict[str, int]) -> str:
+    return "".join(f"{el}{n}" if n > 1 else el for el, n in formula.items())
+
+
+# TODO: use DateTime?
+def format_timestamp(ts: str) -> str:
+    return ts[:16].replace("T", " ")
+
+
 def free_cuda_memory() -> None:
     try:
         import torch

@@ -9,6 +9,7 @@ from rapmat.tui.screens.base_results import (
     BaseResultsScreen,
     _dyn_stability,
     _flags_str,
+    _yes_no,
 )
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.dialog import ModalDialog
@@ -261,8 +262,7 @@ class PhaseAnalysisScreen(BaseResultsScreen):
             t = result.thickness
             row.append("" if t is None else f"{t:.2f}")
         if self._show_dynamical_stability:
-            dyn = _dyn_stability(result, self._phonon_cutoff)
-            row.append("Yes" if dyn is True else ("No" if dyn is False else ""))
+            row.append(_yes_no(_dyn_stability(result, self._phonon_cutoff), na=""))
         return row
 
     def _refresh_after_membership_change(self) -> None:

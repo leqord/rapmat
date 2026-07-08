@@ -7,6 +7,7 @@ from rapmat.tui.state import AppState
 from rapmat.tui.widgets.config_grid import build_config_grid
 from rapmat.tui.widgets.search import LiveSearchEdit
 from rapmat.tui.widgets.table import SortableTable
+from rapmat.utils.common import format_timestamp
 
 _STUDY_COLS = [
     ("Name", 22),
@@ -29,7 +30,7 @@ def _enrich_studies(state: "AppState") -> list[dict]:
 
 
 def _format_study_row(row: dict) -> list[str]:
-    ts = row.get("timestamp", "")[:16].replace("T", " ")
+    ts = format_timestamp(row.get("timestamp", ""))
     return [
         row.get("study_id", "-"),
         row.get("system", "-"),

@@ -86,6 +86,10 @@ class ResultRow(BaseModel):
         return self.structure.id
 
     @property
+    def short_id(self) -> str:
+        return self.structure_id.split("/")[-1]
+
+    @property
     def formula(self) -> str:
         return self.structure.formula
 

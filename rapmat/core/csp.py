@@ -58,7 +58,7 @@ def run_processing_loop(
 
     candidates = store.get_unrelaxed_candidates(run_name)
 
-    relaxed_structures = []
+    n_relaxed = 0
 
     free_cuda_memory()
 
@@ -79,7 +79,7 @@ def run_processing_loop(
             progress_callback(counter, n_candidates, msg)
 
     def _run_loop():
-        nonlocal counter, discarded_sanity
+        nonlocal counter, discarded_sanity, n_relaxed
         nonlocal calculator
 
         for candidate in candidates:
@@ -182,7 +182,7 @@ def run_processing_loop(
                         atoms=relaxed_structure,
                         metadata=meta,
                     )
-                    relaxed_structures.append(relaxed_structure)
+                    n_relaxed += 1
                     break
 
                 except Exception as ex:
@@ -235,7 +235,6 @@ def run_processing_loop(
 
     _run_loop()
 
-    n_relaxed = len(relaxed_structures)
     pressure_msg = f" | Pressure: {pressure_gpa} GPa" if pressure_gpa > 0 else ""
     logger.info(
         "Done. Run: %s | Storage: %s%s | Relaxed: %d | Discarded (sanity): %d",

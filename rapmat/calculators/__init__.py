@@ -84,6 +84,15 @@ class ProgressCalcCallback:
             self._progress_callback(0, 0, message)
 
 
+class LogCalcCallback:
+    def __init__(self, log_fn) -> None:
+        self._log_fn = log_fn
+
+    def on_status(self, message: str) -> None:
+        if self._log_fn:
+            self._log_fn(message)
+
+
 def _notify(callback: CalculatorCallback | None, message: str) -> None:
     if callback is not None:
         callback.on_status(message)

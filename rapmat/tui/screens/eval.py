@@ -7,7 +7,7 @@ from rapmat.core.entities import ResultRow, Structure
 from rapmat.tui.keymap import KeyBinding
 from rapmat.tui.router import ScreenRouter
 from rapmat.tui.screens.base import ScreenBase
-from rapmat.tui.screens.base_results import BaseResultsScreen
+from rapmat.tui.screens.base_results import BaseResultsScreen, _yes_no
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.calc_fields import (
     calculator_fields,
@@ -208,8 +208,7 @@ class EvalResultsScreen(BaseResultsScreen):
         return "Yes" if val >= cutoff else "No"
 
     def _format_row(self, r) -> list:
-        full_id = str(r.structure_id)
-        short_id = full_id.split("/")[-1] if "/" in full_id else full_id
+        short_id = r.short_id
 
         mlip = r.energy_per_atom
         ref = r.ref_energy_per_atom
@@ -231,8 +230,7 @@ class EvalResultsScreen(BaseResultsScreen):
             row.append(self._fmt_dyn(r.min_phonon_freq))
             row.append(self._fmt_dyn(r.ref_phonon_freq))
         if self._show_duplicate_col:
-            dup = r.duplicate
-            row.append("Yes" if dup is True else ("No" if dup is False else ""))
+            row.append(_yes_no(r.duplicate, na=""))
         return row
 
     def _attr_fn(self, r) -> str:
@@ -486,15 +484,11 @@ class EvalScreen(ScreenBase):
         )
 
     def _worker(self, progress, vals: dict) -> None:
-        from rapmat.calculators import Calculators
+        from rapmat.calculators import Calculators, LogCalcCallback
         from rapmat.calculators.factory import load_calculator
         from rapmat.core.evaluation import (eval_rows_from_cache, run_eval_loop,
                                             select_eval_records)
         from rapmat.utils.common import workdir_context
-
-        class _TaskCalcCallback:
-            def on_status(self, message: str) -> None:
-                progress.log(message)
 
         store = self._state.store
         run_name = vals["run_name"]
@@ -503,8 +497,10 @@ class EvalScreen(ScreenBase):
         cached_only = vals.get("cached_only", False)
         run_phonons = vals["run_phonons"]
 
+        from rapmat.storage.status import StructureStatus
+
         progress.log(f"Loading structures for '{run_name}'...")
-        records = store.get_structures(run_name, status="relaxed")
+        records = store.get_structures(run_name, status=StructureStatus.RELAXED)
 
         initial_count = len(records)
 
@@ -557,7 +553,7 @@ class EvalScreen(ScreenBase):
                     Calculators(calculator_name),
                     wdir,
                     config=vals.get("calculator_config_dict", {}),
-                    callback=_TaskCalcCallback(),
+                    callback=LogCalcCallback(progress.log),
                 )
 
                 run_eval_loop(

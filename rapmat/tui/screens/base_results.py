@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -28,6 +29,26 @@ def _dyn_stability(result: "ResultRow", phonon_cutoff: float | None) -> Optional
         except (TypeError, ValueError):
             pass
     return result.dynamical_stability
+
+
+@dataclass
+class SaveOptions:
+    fmt: str
+    directory: str
+    cell_mode: str
+    save_all: bool
+    version: str = "relaxed"
+    symprec: float = 1e-3
+    table_export: str | None = "txt"
+    save_dispersion: bool = False
+
+
+def _yes_no(val: bool | None, na: str = "N/A") -> str:
+    if val is True:
+        return "Yes"
+    if val is False:
+        return "No"
+    return na
 
 
 def _row_attr(result: "ResultRow") -> str:
@@ -141,8 +162,11 @@ class _SaveDialog(ModalDialog):
             )
             self._emit("close", True)
             on_save(
-                fmt, directory, cell_mode, save_all, version, symprec,
-                table_export, save_dispersion,
+                SaveOptions(
+                    fmt=fmt, directory=directory, cell_mode=cell_mode,
+                    save_all=save_all, version=version, symprec=symprec,
+                    table_export=table_export, save_dispersion=save_dispersion,
+                )
             )
 
         def _cancel(_btn: urwid.Button) -> None:
@@ -544,8 +568,7 @@ class BaseResultsScreen(ScreenBase):
 
             if self._show_dynamical_stability:
                 dyn = _dyn_stability(result, self._phonon_cutoff)
-                dyn_str = "Yes" if dyn is True else ("No" if dyn is False else "N/A")
-                add_cell("Dyn. Stability", dyn_str)
+                add_cell("Dyn. Stability", _yes_no(dyn))
 
             min_freq = result.min_phonon_freq
             if min_freq is not None:
@@ -781,35 +804,24 @@ class BaseResultsScreen(ScreenBase):
         )
 
         def _factory(parent, close):
-            def _on_save(
-                fmt: str, directory: str, cell_mode: str, save_all: bool,
-                version: str = "relaxed", symprec: float = 1e-3,
-                table_export: str | None = "txt", save_dispersion: bool = False,
-            ) -> None:
+            def _on_save(opts: SaveOptions) -> None:
                 close()
-                if not save_all:
-                    self._do_save(
-                        result, fmt, directory, cell_mode,
-                        quiet=False, version=version, symprec=symprec,
-                        save_dispersion=save_dispersion,
-                    )
+                if not opts.save_all:
+                    self._do_save(result, opts, quiet=False)
                 else:
                     success_count = 0
                     for res in filtered_results:
                         if res.atoms is None:
                             continue
-                        if self._do_save(
-                            res, fmt, directory, cell_mode,
-                            quiet=True, version=version, symprec=symprec,
-                            save_dispersion=save_dispersion,
-                        ):
+                        if self._do_save(res, opts, quiet=True):
                             success_count += 1
                     self._show_message(
-                        f"Saved {success_count}/{num_filtered} structures to {directory}"
+                        f"Saved {success_count}/{num_filtered} structures "
+                        f"to {opts.directory}"
                     )
-                if table_export:
+                if opts.table_export:
                     self._export_results_table(
-                        filtered_results, directory, table_export,
+                        filtered_results, opts.directory, opts.table_export,
                     )
 
             save_dlg = _SaveDialog(
@@ -830,32 +842,28 @@ class BaseResultsScreen(ScreenBase):
     def _do_save(
         self,
         result: "ResultRow",
-        fmt: str,
-        directory: str,
-        cell_mode: str = "As-is",
+        opts: SaveOptions,
+        *,
         quiet: bool = False,
-        version: str = "relaxed",
-        symprec: float = 1e-3,
-        save_dispersion: bool = False,
     ) -> bool:
         from rapmat.core.export import save_structure
 
-        if version == "initial" and result.initial_atoms is not None:
+        if opts.version == "initial" and result.initial_atoms is not None:
             atoms = result.initial_atoms
         else:
             atoms = result.atoms
         if atoms is None:
             return False
         ident = self._save_ident(result).replace("/", "_")
-        prefix = "initial_" if version == "initial" else ""
+        prefix = "initial_" if opts.version == "initial" else ""
         try:
             out_path = save_structure(
-                atoms, directory, ident, fmt,
-                cell_mode=cell_mode, symprec=symprec, prefix=prefix,
+                atoms, opts.directory, ident, opts.fmt,
+                cell_mode=opts.cell_mode, symprec=opts.symprec, prefix=prefix,
             )
-            if save_dispersion:
+            if opts.save_dispersion:
                 self._save_dispersion_plot(
-                    result, Path(directory) / f"dispersion_{ident}.png"
+                    result, Path(opts.directory) / f"dispersion_{ident}.png"
                 )
             if not quiet:
                 self._show_message(f"Saved: {out_path}")

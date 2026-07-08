@@ -73,11 +73,7 @@ class StatusScreen(ScreenBase):
     # ------------------------------------------------------------------ #
 
     def _build_widget(self) -> urwid.Widget:
-        import platformdirs
-
-        _APP_NAME = "rapmat-materials"
-        APP_CONFIG_DIR = platformdirs.user_config_dir(_APP_NAME)
-        APP_DATA_DIR = platformdirs.user_data_dir(_APP_NAME)
+        from rapmat.config import APP_CONFIG_DIR, APP_DATA_DIR
 
         rows = _load_calc_rows()
         self._table = SortableTable(

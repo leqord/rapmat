@@ -8,6 +8,7 @@ from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.config_grid import build_config_grid
 from rapmat.tui.widgets.table import SortableTable
+from rapmat.utils.common import format_formula, format_timestamp
 
 if TYPE_CHECKING:
     from rapmat.core.entities import RunMetadata
@@ -30,8 +31,7 @@ def _classify_run(run: "RunMetadata", study_elements: list[str]) -> str:
 
 
 def _formula_str(run: "RunMetadata") -> str:
-    formula = run.search_config.formula
-    return "".join(f"{el}{n}" if n > 1 else el for el, n in formula.items())
+    return format_formula(run.search_config.formula)
 
 
 class StudyDetailScreen(ScreenBase):
@@ -109,7 +109,7 @@ class StudyDetailScreen(ScreenBase):
         from rapmat.utils.common import parse_system
 
         elements = parse_system(study.system)
-        ts = study.timestamp[:16].replace("T", " ")
+        ts = format_timestamp(study.timestamp)
 
         info_text = urwid.Text(
             [
@@ -236,7 +236,9 @@ class StudyDetailScreen(ScreenBase):
         self._router.push(ResultsScreen(self._state, self._router))
 
     def _on_unlock_run(self, run_name: str) -> None:
-        self._state.store.release_run(run_name, "pending")
+        from rapmat.storage.status import RunStatus
+
+        self._state.store.release_run(run_name, RunStatus.PENDING)
         if self._placeholder:
             self._placeholder.original_widget = self._build_widget()
 

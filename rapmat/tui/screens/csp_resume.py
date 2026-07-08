@@ -57,9 +57,9 @@ class CSPResumeScreen(ScreenBase):
             return urwid.Frame(body=body)
 
         cfg = meta.search_config
-        formula_str = "".join(
-            f"{el}{n}" if n > 1 else el for el, n in cfg.formula.items()
-        )
+        from rapmat.utils.common import format_formula
+
+        formula_str = format_formula(cfg.formula)
         seed_str = str(cfg.seed) if cfg.seed is not None else "-"
 
         info_text = urwid.Text(

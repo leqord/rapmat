@@ -229,35 +229,26 @@ class StudyListScreen(ScreenBase):
             if study:
                 self._open_delete_modal(study["study_id"])
 
+    def _dialog_host_get(self) -> "urwid.Widget | None":
+        return self._widget.original_widget if self._widget is not None else None
+
+    def _dialog_host_set(self, widget: urwid.Widget) -> None:
+        self._widget.original_widget = widget
+
     def _open_delete_modal(self, study_id: str) -> None:
-        if self._widget is None:
-            return
+        def _confirmed() -> None:
+            self._state.store.delete_study(study_id)
+            self._state.invalidate_studies()
+            self._state.refresh_studies_if_needed()
+            self._all_rows = _enrich_studies(self._state)
+            if self._table is not None:
+                self._table.set_data(self._all_rows)
+                self._on_study_focus_change(self._table.get_focused_row())
 
-        from rapmat.tui.widgets.dialog import ModalDialog
-
-        current_body = self._widget.original_widget
-
-        def _on_close(confirmed: bool) -> None:
-            if self._widget is not None:
-                self._widget.original_widget = current_body
-                if confirmed:
-                    self._state.store.delete_study(study_id)
-                    self._state.invalidate_studies()
-                    self._state.refresh_studies_if_needed()
-                    self._all_rows = _enrich_studies(self._state)
-                    if self._table is not None:
-                        self._table.set_data(self._all_rows)
-                        self._on_study_focus_change(self._table.get_focused_row())
-
-        dlg = ModalDialog.confirm(
-            title="Delete Study",
-            message=(
+        self.confirm_dialog(
+            "Delete Study",
+            (
                 f"Are you sure you want to permanently delete study '{study_id}'?\n\n"
-                "This will recursively remove:\n"
-                " - All runs belonging to this study\n"
-                " - All structures belonging to those runs"
             ),
-            parent=current_body,
-            on_close=_on_close,
+            _confirmed,
         )
-        self._widget.original_widget = dlg

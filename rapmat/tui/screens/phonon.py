@@ -43,9 +43,6 @@ class PhononDispersionScreen(ScreenBase):
             ),
         ]
 
-    def esc_label(self) -> str:
-        return "Cancel" if self._running else "Back"
-
     # ------------------------------------------------------------------ #
     #  Layout
     # ------------------------------------------------------------------ #
@@ -318,19 +315,3 @@ class PhononDispersionScreen(ScreenBase):
         self._running = False
         self._progress_panel.set_finished(False, f"Error: {error}")
 
-    # ------------------------------------------------------------------ #
-    #  Key handling
-    # ------------------------------------------------------------------ #
-
-    def keypress(self, size: tuple, key: str) -> str | None:
-        if super().keypress(size, key) is None:
-            return None
-        if key == "esc":
-            if self._running:
-                if self._task:
-                    self._task.cancel()
-                    self._progress_panel.set_cancelling()
-                return None
-            self._router.pop()
-            return None
-        return key

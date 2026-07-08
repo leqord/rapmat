@@ -90,11 +90,15 @@ class DedupScreen(ScreenBase):
         ]
 
     def esc_label(self) -> str:
-        if self._running:
-            return "Cancel"
-        if self._overlay_open:
+        if self._overlay_open and not self._running:
             return "Close"
-        return "Back"
+        return super().esc_label()
+
+    def _dialog_host_get(self) -> "urwid.Widget | None":
+        return self._frame.body if self._frame is not None else None
+
+    def _dialog_host_set(self, widget: urwid.Widget) -> None:
+        self._frame.body = widget
 
     def refresh_footer(self, message: str = "") -> None:
         if self._applying:
@@ -227,11 +231,6 @@ class DedupScreen(ScreenBase):
         from rapmat.core.dedup_analysis import (DedupAnalysisError,
                                                 run_dedup_analysis)
 
-        def _cb(current, total, message, is_log=False):
-            progress.update(current, total, message)
-            if is_log:
-                progress.log(message)
-
         try:
             analysis = run_dedup_analysis(
                 self._state.store,
@@ -247,7 +246,9 @@ class DedupScreen(ScreenBase):
                 angle_tol=vals["pymatgen_angle"],
                 use_forces=vals["force_dedup"],
                 force_cosine_threshold=vals["force_cosine"],
-                progress_callback=_cb,
+                progress_callback=progress.as_callback(
+                    raise_on_cancel=False, default_is_log=False
+                ),
             )
         except DedupAnalysisError as exc:
             progress.fail(str(exc))
@@ -700,7 +701,7 @@ class DedupScreen(ScreenBase):
     # ------------------------------------------------------------------ #
 
     def _confirm_clear_duplicates(self) -> None:
-        if self._frame is None or self._running or self._applying:
+        if self._running or self._applying:
             return
         run_name = self._form.get_values().get("run_name")
         if not run_name or run_name == "(no runs)":
@@ -708,22 +709,11 @@ class DedupScreen(ScreenBase):
                 self._state.status_bar.set_message("No run selected.")
             return
 
-        current_body = self._frame.body
-
-        def _on_close(ok: bool) -> None:
-            self._frame.body = current_body
-            self.refresh_footer()
-            if ok:
-                self._do_clear_duplicates(run_name)
-
-        dlg = ModalDialog.confirm(
+        self.confirm_dialog(
             "Clear duplicate labels",
             f"Remove all duplicate labels for run '{run_name}'?",
-            current_body,
-            _on_close,
+            lambda: self._do_clear_duplicates(run_name),
         )
-        self._frame.body = dlg
-        self.refresh_footer()
 
     def _do_clear_duplicates(self, run_name: str) -> None:
         try:
@@ -741,17 +731,12 @@ class DedupScreen(ScreenBase):
     def keypress(self, size: tuple, key: str) -> str | None:
         if self._applying:
             return None
-        if super().keypress(size, key) is None:
-            return None
-        if key == "esc":
-            if self._running:
-                if self._task:
-                    self._task.cancel()
-                    self._progress_panel.set_cancelling()
-                return None
-            if self._overlay_open:
-                self._close_overlay()
-                return None
-            self._router.pop()
-            return None
-        return key
+        return super().keypress(size, key)
+
+    def _on_esc(self) -> bool:
+        if super()._on_esc():
+            return True
+        if self._overlay_open:
+            self._close_overlay()
+            return True
+        return False

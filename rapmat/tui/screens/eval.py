@@ -338,8 +338,11 @@ class EvalScreen(ScreenBase):
             ),
         ]
 
-    def esc_label(self) -> str:
-        return "Cancel" if self._running else "Back"
+    def _dialog_host_get(self) -> "urwid.Widget | None":
+        return self._widget.original_widget if self._widget is not None else None
+
+    def _dialog_host_set(self, widget: urwid.Widget) -> None:
+        self._widget.original_widget = widget
 
     # ------------------------------------------------------------------ #
     #  Layout
@@ -424,7 +427,7 @@ class EvalScreen(ScreenBase):
     # ------------------------------------------------------------------ #
 
     def _on_clear_cache(self, _btn=None) -> None:
-        if self._running or self._form is None or self._widget is None:
+        if self._running:
             return
 
         run_name = self._run_name
@@ -433,29 +436,19 @@ class EvalScreen(ScreenBase):
             self._error_text.set_text(("form_error", "No active run selected"))
             return
 
-        from rapmat.tui.widgets.dialog import ModalDialog
+        def _confirmed() -> None:
+            self._state.store.clear_evaluations(run_name)
+            self._error_text.set_text(
+                ("success", f"Cache cleared for run '{run_name}'")
+            )
 
-        current_body = self._widget.original_widget
-
-        def _on_close(confirmed: bool) -> None:
-            self._widget.original_widget = current_body
-            if confirmed:
-                self._state.store.clear_evaluations(run_name)
-                self._error_text.set_text(
-                    ("success", f"Cache cleared for run '{run_name}'")
-                )
-                self.refresh_footer()
-
-        dialog = ModalDialog.confirm(
-            title="Clear Reference Cache",
-            message=(
-                f"Are you sure you want to clear the evaluation cache for ALL structures in the run '{run_name}'?\n\n"
-                "This will permanently delete the evaluation cache for this run."
+        self.confirm_dialog(
+            "Clear Reference Cache",
+            (
+                f"Are you sure you want to clear the evaluation cache for ALL structures and ALL calculators in the run '{run_name}'?\n\n"
             ),
-            parent=current_body,
-            on_close=_on_close,
+            _confirmed,
         )
-        self._widget.original_widget = dialog
 
     def _on_start(self, _btn=None) -> None:
         if self._running:
@@ -567,13 +560,6 @@ class EvalScreen(ScreenBase):
                     callback=_TaskCalcCallback(),
                 )
 
-                def _cb(current, total, msg, is_log=True):
-                    if progress.cancelled:
-                        raise KeyboardInterrupt("Cancelled")
-                    progress.update(current, total, msg)
-                    if is_log:
-                        progress.log(msg)
-
                 run_eval_loop(
                     pending,
                     store,
@@ -585,7 +571,7 @@ class EvalScreen(ScreenBase):
                     phonon_displacement=vals.get("phonon_displacement", 1e-2),
                     phonon_supercell=vals.get("phonon_supercell", (3, 3, 3)),
                     phonon_mesh=vals.get("phonon_mesh", (20, 20, 20)),
-                    progress_callback=_cb,
+                    progress_callback=progress.as_callback(),
                     log_callback=progress.log,
                 )
 
@@ -641,19 +627,3 @@ class EvalScreen(ScreenBase):
         self._running = False
         self._progress_panel.set_finished(False, f"Error: {error}")
 
-    # ------------------------------------------------------------------ #
-    #  Key handling
-    # ------------------------------------------------------------------ #
-
-    def keypress(self, size: tuple, key: str) -> str | None:
-        if super().keypress(size, key) is None:
-            return None
-        if key == "esc":
-            if self._running:
-                if self._task:
-                    self._task.cancel()
-                    self._progress_panel.set_cancelling()
-                return None
-            self._router.pop()
-            return None
-        return key

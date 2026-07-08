@@ -4,6 +4,8 @@ from typing import Callable
 
 import urwid
 
+from rapmat.utils.progress import ProgressCallback
+
 # ------------------------------------------------------------------ #
 #  Thread-safe progress state
 # ------------------------------------------------------------------ #
@@ -52,6 +54,27 @@ class TaskProgress:
             lines = list(self.log_lines)
             self.log_lines.clear()
         return lines
+
+    def as_callback(
+        self,
+        *,
+        raise_on_cancel: bool = True,
+        default_is_log: bool = True,
+    ) -> ProgressCallback:
+        """Adapt this progress object to the ProgressCallback contract."""
+
+        def _cb(
+            current: int, total: int, message: str = "",
+            is_log: bool | None = None,
+        ) -> None:
+            if raise_on_cancel and self.cancelled:
+                raise KeyboardInterrupt("Cancelled by user")
+            self.update(current, total, message)
+            effective_is_log = default_is_log if is_log is None else is_log
+            if effective_is_log and message:
+                self.log(message)
+
+        return _cb
 
 
 # ------------------------------------------------------------------ #

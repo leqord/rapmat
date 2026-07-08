@@ -240,37 +240,32 @@ class StudyDetailScreen(ScreenBase):
         if self._placeholder:
             self._placeholder.original_widget = self._build_widget()
 
-    def _open_delete_modal(self, run_name: str) -> None:
-        if self._placeholder is None:
-            return
+    def _dialog_host_get(self) -> "urwid.Widget | None":
+        return (
+            self._placeholder.original_widget
+            if self._placeholder is not None
+            else None
+        )
 
+    def _dialog_host_set(self, widget: urwid.Widget) -> None:
+        self._placeholder.original_widget = widget
+
+    def _open_delete_modal(self, run_name: str) -> None:
         run_data = self._state.store.get_run_metadata(run_name)
         status = run_data.run_status if run_data else "pending"
         worker_id = run_data.worker_id if run_data else None
         is_active = worker_id and status in ("generating", "processing")
 
-        from rapmat.tui.widgets.dialog import ModalDialog
-
-        current_body = self._placeholder.original_widget
-
-        def _on_close(confirmed: bool) -> None:
-            if self._placeholder is not None:
-                self._placeholder.original_widget = current_body
-                if confirmed:
-                    self._state.store.delete_run(run_name)
-                    self._placeholder.original_widget = self._build_widget()
-
-        msg = f"Are you sure you want to permanently delete run '{run_name}' and all its structures?"
+        msg = f"Are you sure you want to permanently delete run '{run_name}'?"
         if is_active:
             msg += f"\n\nWARNING: This run appears to be claimed and being processed right now by the {worker_id[:4]} worker"
 
-        dlg = ModalDialog.confirm(
-            title="Delete Run",
-            message=msg,
-            parent=current_body,
-            on_close=_on_close,
-        )
-        self._placeholder.original_widget = dlg
+        def _confirmed() -> None:
+            self._state.store.delete_run(run_name)
+            if self._placeholder is not None:
+                self._placeholder.original_widget = self._build_widget()
+
+        self.confirm_dialog("Delete Run", msg, _confirmed)
 
     def _focused_run_name(self) -> str | None:
         if self._table is None:

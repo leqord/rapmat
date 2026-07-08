@@ -6,7 +6,6 @@ from rapmat.tui.keymap import KeyBinding
 from rapmat.tui.router import ScreenRouter
 from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.state import AppState
-from rapmat.tui.widgets.dialog import ModalDialog
 from rapmat.tui.widgets.form import (FormGroup, dropdown_field, int_field,
                                      text_field)
 from rapmat.tui.widgets.progress import ProgressPanel
@@ -38,9 +37,6 @@ class CSPSearchScreen(ScreenBase):
                 help="Generate and relax structures", priority=10,
             ),
         ]
-
-    def esc_label(self) -> str:
-        return "Cancel" if self._running else "Back"
 
     # ------------------------------------------------------------------ #
     #  Form construction
@@ -162,10 +158,8 @@ class CSPSearchScreen(ScreenBase):
         )
 
     def _worker(self, progress, vals) -> None:
-        import time
-
-        from rapmat.core.csp import run_generation_loop, run_processing_loop
-        from rapmat.utils.common import parse_formula, workdir_context
+        from rapmat.core.csp import execute_run
+        from rapmat.utils.common import parse_formula
 
         store = self._state.store
         fu_min = max(1, vals["fu_min"])
@@ -196,13 +190,6 @@ class CSPSearchScreen(ScreenBase):
 
         wid = uuid.uuid4().hex[:12]
 
-        def _cb(current, total, msg, is_log=True):
-            if progress.cancelled:
-                raise KeyboardInterrupt("Cancelled by user")
-            progress.update(current, total, msg)
-            if is_log:
-                progress.log(msg)
-
         progress.log(f"Queuing run '{run_name}'...")
 
         run_config = {
@@ -230,67 +217,18 @@ class CSPSearchScreen(ScreenBase):
 
         store.add_generation_placeholders(run_name, placeholders)
 
-        cancel_flag = [False]
+        meta = store.get_run_metadata(run_name)
+        full_cfg = meta.search_config if meta else run_config
 
-        progress.log(f"Starting generation phase for {run_name}...")
-        try:
-            with workdir_context(None) as workdir_path:
-                progress.log(f"Working directory: {workdir_path}")
-
-                meta = store.get_run_metadata(run_name)
-                full_cfg = meta.search_config if meta else run_config
-
-                run_generation_loop(
-                    run_name=run_name,
-                    store=store,
-                    config=full_cfg,
-                    worker_id=wid,
-                    workers=workers,
-                    progress_callback=_cb,
-                    cancel_flag=cancel_flag,
-                    log_callback=progress.log,
-                )
-
-                if progress.cancelled or cancel_flag[0]:
-                    raise KeyboardInterrupt("Cancelled by user")
-
-                progress.log(
-                    "Generation complete. Initializing calculator for processing..."
-                )
-                store.set_run_status(run_name, "processing")
-
-                def _proc_cb(current, total, msg, is_log=True):
-                    if progress.cancelled:
-                        cancel_flag[0] = True
-                        raise KeyboardInterrupt("Cancelled by user")
-                    progress.update(current, total, msg)
-                    if is_log:
-                        progress.log(msg)
-
-                progress.log(f"Starting processing phase for {run_name}...")
-
-                t0 = time.monotonic()
-                run_processing_loop(
-                    run_name=run_name,
-                    store=store,
-                    config=full_cfg,
-                    workdir_path=workdir_path,
-                    worker_id=wid,
-                    progress_callback=_proc_cb,
-                    cancel_flag=cancel_flag,
-                )
-                t1 = time.monotonic()
-                progress.log(
-                    f"Run '{run_name}' computation finished in {t1 - t0:.2f} seconds."
-                )
-
-                store.release_run(run_name, "completed")
-        except KeyboardInterrupt:
-            store.release_run(run_name, "interrupted")
-            raise
-        except Exception:
-            store.release_run(run_name, "failed")
-            raise
+        execute_run(
+            run_name,
+            store,
+            full_cfg,
+            worker_id=wid,
+            workers=workers,
+            progress_callback=progress.as_callback(),
+            log_callback=progress.log,
+        )
 
         self._state.active_run = run_name
         self._state.invalidate()
@@ -303,41 +241,24 @@ class CSPSearchScreen(ScreenBase):
     def _on_complete(self) -> None:
         self._running = False
         self._progress_panel.set_finished(True, "Run completed successfully!")
-        if self._frame and self._main_body:
-            dlg = ModalDialog.confirm(
-                "Run Complete",
-                "CSP run finished. View results?",
-                parent=self._main_body,
-                on_close=self._on_dialog_close,
-            )
-            self._frame.body = dlg
+        self.confirm_dialog(
+            "Run Complete", "View results?", self._open_results
+        )
 
     def _on_error(self, error: str) -> None:
         self._running = False
         self._progress_panel.set_finished(False, f"Error: {error}")
         self._progress_panel.add_log(f"ERROR: {error}")
 
-    def _on_dialog_close(self, confirmed: bool) -> None:
-        if self._frame:
-            self._frame.body = self._main_body
-        if confirmed and self._state.active_run:
+    def _dialog_host_get(self) -> "urwid.Widget | None":
+        return self._frame.body if self._frame is not None else None
+
+    def _dialog_host_set(self, widget: urwid.Widget) -> None:
+        self._frame.body = widget
+
+    def _open_results(self) -> None:
+        if self._state.active_run:
             from rapmat.tui.screens.results import ResultsScreen
 
             self._router.push(ResultsScreen(self._state, self._router))
 
-    # ------------------------------------------------------------------ #
-    #  Key handling
-    # ------------------------------------------------------------------ #
-
-    def keypress(self, size: tuple, key: str) -> str | None:
-        if super().keypress(size, key) is None:
-            return None
-        if key == "esc":
-            if self._running:
-                if self._task:
-                    self._task.cancel()
-                    self._progress_panel.set_cancelling()
-                return None
-            self._router.pop()
-            return None
-        return key

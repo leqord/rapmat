@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 license = "GPL-3.0-or-later"
-authors = [{ name = "Michael", email = "leqord@proton.me" }]
+authors = [{ name = "Michael"}]
 
 [project.urls]
 Homepage = "https://github.com/leqord/rapmat"

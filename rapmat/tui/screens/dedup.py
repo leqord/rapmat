@@ -122,7 +122,12 @@ class DedupScreen(ScreenBase):
     def _build_frame(self) -> urwid.Frame:
         from rapmat.core.dedup_analysis import (DEFAULT_SOAP_L_MAX,
                                                 DEFAULT_SOAP_N_MAX,
-                                                DEFAULT_SOAP_R_CUT)
+                                                DEFAULT_SOAP_R_CUT,
+                                                DEFAULT_SOAP_SIGMA,
+                                                METRIC_BY_CHOICE, METRICS)
+
+        self._metrics = METRICS
+        self._metric_by_choice = METRIC_BY_CHOICE
 
         run_opts = self._run_options()
         default_idx = 0
@@ -133,7 +138,11 @@ class DedupScreen(ScreenBase):
             [
                 dropdown_field("run_name", "Run", run_opts, default=default_idx),
                 dropdown_field("stage", "Stage", ["relaxed", ], default=0),
-                float_field("dedup_threshold", "Dedup threshold", default=1e-2),
+                float_field("dedup_threshold", "Threshold", default=1e-2),
+                dropdown_field(
+                    "metric", "Metric",
+                    list(METRIC_BY_CHOICE), default=0,
+                ),
                 checkbox_field("pymatgen_dedup", "Pymatgen dedup", default=False),
                 float_field("pymatgen_ltol", "Pymatgen ltol", default=0.2),
                 float_field("pymatgen_stol", "Pymatgen stol", default=0.3),
@@ -143,18 +152,28 @@ class DedupScreen(ScreenBase):
                 float_field("soap_r_cut", "SOAP r_cut", default=DEFAULT_SOAP_R_CUT),
                 int_field("soap_n_max", "SOAP n_max", default=DEFAULT_SOAP_N_MAX),
                 int_field("soap_l_max", "SOAP l_max", default=DEFAULT_SOAP_L_MAX),
+                float_field("soap_sigma", "SOAP sigma", default=DEFAULT_SOAP_SIGMA),
             ],
             label_width=22,
             groups=[
-                ("General", ["run_name", "stage", "dedup_threshold"]),
+                ("General", ["run_name", "stage", "dedup_threshold", "metric"]),
                 ("Pymatgen", [
                     "pymatgen_dedup", "pymatgen_ltol",
                     "pymatgen_stol", "pymatgen_angle",
                 ]),
                 ("Forces", ["force_dedup", "force_cosine"]),
-                ("SOAP Descriptor", ["soap_r_cut", "soap_n_max", "soap_l_max"]),
+                ("SOAP Descriptor", [
+                    "soap_r_cut", "soap_n_max", "soap_l_max", "soap_sigma",
+                ]),
             ],
         )
+
+        self._metric_hint = urwid.Text(
+            ("details", f"  {METRICS['euclidean'].hint}")
+        )
+        metric_widget = self._form.get_widget("metric")
+        if metric_widget is not None:
+            urwid.connect_signal(metric_widget, "change", self._on_metric_change)
 
         self._error_text = urwid.Text("")
 
@@ -176,6 +195,7 @@ class DedupScreen(ScreenBase):
             urwid.SimpleListWalker(
                 [
                     self._form,
+                    self._metric_hint,
                     urwid.Divider(),
                     urwid.Columns(
                         [(18, start_btn), (18, clear_btn)], dividechars=1
@@ -201,13 +221,38 @@ class DedupScreen(ScreenBase):
         self.refresh_footer()
         return urwid.Frame(body=body)
 
+    def _on_metric_change(self, _widget, option: str) -> None:
+        metric = self._metric_by_choice.get(option, "euclidean")
+        self._metric_hint.set_text(
+            ("details", f"  {self._metrics[metric].hint}")
+        )
+
     # ------------------------------------------------------------------ #
     #  Submit
     # ------------------------------------------------------------------ #
 
+    def _validate(self, vals: dict) -> list[str]:
+        errors = self._form.validate()
+        threshold = vals["dedup_threshold"]
+        if threshold <= 0:
+            errors.append("Threshold must be > 0")
+        elif vals["metric"] == "cosine" and threshold >= 2:
+            errors.append(
+                f"Threshold must be < 2 for the {self._metrics['cosine'].short} metric"
+            )
+        return errors
+
     def _on_start(self, _btn=None) -> None:
         if self._running or self._applying:
             return
+
+        vals = self._form.get_values()
+        vals["metric"] = self._metric_by_choice.get(vals["metric"], "euclidean")
+        errors = self._validate(vals)
+        if errors:
+            self._error_text.set_text(("form_error", " " + "; ".join(errors)))
+            return
+
         self._running = True
         self._applied = False
         self._error_text.set_text("")
@@ -216,8 +261,6 @@ class DedupScreen(ScreenBase):
         # Close any existing overlay
         if self._overlay_open:
             self._close_overlay()
-
-        vals = self._form.get_values()
 
         self.run_task(
             lambda prog: self._worker(prog, vals),
@@ -237,9 +280,11 @@ class DedupScreen(ScreenBase):
                 vals["run_name"],
                 stage=vals["stage"],
                 threshold=vals["dedup_threshold"],
+                metric=vals["metric"],
                 soap_r_cut=vals["soap_r_cut"],
                 soap_n_max=int(vals["soap_n_max"]),
                 soap_l_max=int(vals["soap_l_max"]),
+                soap_sigma=vals["soap_sigma"],
                 use_pymatgen=vals["pymatgen_dedup"],
                 ltol=vals["pymatgen_ltol"],
                 stol=vals["pymatgen_stol"],
@@ -506,6 +551,7 @@ class DedupScreen(ScreenBase):
 
         run_name = d["run_name"]
         stage = d["stage"]
+        metric = self._metrics[d["metric"]].short
         overlay_body = urwid.Frame(
             body=scrollable_body,
             footer=footer,
@@ -513,7 +559,7 @@ class DedupScreen(ScreenBase):
 
         inner = urwid.LineBox(
             urwid.Padding(overlay_body, left=1, right=1),
-            title=f" Deduplication: {run_name} ({stage}) ",
+            title=f"Deduplication: {run_name} ({stage}, {metric}) ",
         )
 
         overlay = urwid.Overlay(
@@ -560,6 +606,7 @@ class DedupScreen(ScreenBase):
                 threshold=d["threshold"],
                 save_path=plot_path,
                 title=f"Pairwise Distance Distribution - {d['run_name']} ({d['stage']})",
+                axis_label=self._metrics[d["metric"]].axis,
             )
             if self._state.status_bar:
                 self._state.status_bar.set_message(f"Plot saved to {plot_path}")

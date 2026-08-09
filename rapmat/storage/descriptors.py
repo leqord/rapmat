@@ -14,6 +14,7 @@ class SOAPDescriptor:
         r_cut: float = 6.0,
         n_max: int = 8,
         l_max: int = 6,
+        sigma: float = 1.0,
         periodic: bool = True,
     ):
         self._soap = SOAP(
@@ -22,6 +23,7 @@ class SOAPDescriptor:
             r_cut=r_cut,
             n_max=n_max,
             l_max=l_max,
+            sigma=sigma,
             average="inner",
             sparse=False,
         )

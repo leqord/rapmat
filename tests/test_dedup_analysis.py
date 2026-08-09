@@ -5,9 +5,12 @@ import pytest
 from ase.build import bulk
 from conftest import add_generated_candidate
 
-from rapmat.core.dedup_analysis import (compute_pairwise_distances,
+from rapmat.core.dedup_analysis import (DedupAnalysisError,
+                                        compute_pairwise_distances,
                                         find_threshold_for_survival,
                                         plot_distance_histogram,
+                                        prepare_distances,
+                                        run_dedup_analysis,
                                         simulate_deduplication)
 from rapmat.core.entities import Structure
 from rapmat.storage import SOAPDescriptor, SQLiteStore
@@ -156,6 +159,68 @@ class TestSimulateDedup:
 
 
 # ------------------------------------------------------------------ #
+#  Distance metric and SOAP sigma
+# ------------------------------------------------------------------ #
+
+
+class TestMetricAndSigma:
+    def test_sigma_changes_descriptor(self):
+        cu = bulk("Cu", "fcc", a=3.615)
+        broad = SOAPDescriptor(species=["Cu"], n_max=4, l_max=3).compute(cu)
+        narrow = SOAPDescriptor(
+            species=["Cu"], n_max=4, l_max=3, sigma=0.5
+        ).compute(cu)
+        assert broad.shape == narrow.shape
+        assert np.all(np.isfinite(broad))
+        assert np.all(np.isfinite(narrow))
+        assert not np.allclose(broad, narrow)
+
+    def test_cosine_is_scale_invariant(self):
+        cu = bulk("Cu", "fcc", a=3.615)
+        v = np.array([3.0, 4.0])
+        entries = [
+            _make_entry("s/1", cu, -3.0, v),
+            _make_entry("s/2", cu, -2.0, 2.0 * v),
+        ]
+        cos = simulate_deduplication(entries, threshold=1e-6, metric="cosine")
+        assert cos.kept == 1
+        l2 = simulate_deduplication(entries, threshold=1e-6, metric="euclidean")
+        assert l2.kept == 2
+
+    def test_cosine_distances_bounded(self):
+        cu = bulk("Cu", "fcc", a=3.615)
+        vecs = [
+            np.array([1.0, 0.0]),
+            np.array([0.0, 1.0]),
+            np.array([-1.0, 0.0]),
+        ]
+        entries = [
+            _make_entry(f"s/{i}", cu, -3.0 + i, v) for i, v in enumerate(vecs)
+        ]
+        prep = prepare_distances(entries, metric="cosine")
+        assert prep.condensed.min() >= 0.0
+        assert prep.condensed.max() <= 2.0 + 1e-12
+        assert np.max(prep.condensed) == pytest.approx(2.0)
+
+    def test_identical_vectors_merge_under_both_metrics(self):
+        cu = bulk("Cu", "fcc", a=3.615)
+        v = np.array([1.0, 2.0, 3.0])
+        for metric in ("euclidean", "cosine"):
+            entries = [
+                _make_entry("s/1", cu, -3.0, v.copy()),
+                _make_entry("s/2", cu, -2.0, v.copy()),
+            ]
+            result = simulate_deduplication(
+                entries, threshold=1e-6, metric=metric
+            )
+            assert result.kept == 1, metric
+
+    def test_unknown_metric_rejected(self):
+        with pytest.raises(DedupAnalysisError):
+            run_dedup_analysis(None, "whatever", metric="chebyshev")
+
+
+# ------------------------------------------------------------------ #
 #  find_threshold_for_survival
 # ------------------------------------------------------------------ #
 
@@ -232,6 +297,15 @@ class TestPlotHistogram:
         out = tmp_path / "hist.svg"
         plot_distance_histogram(distances, save_path=out)
         assert out.exists()
+
+    def test_axis_label(self, tmp_path):
+        distances = np.array([0.1, 0.5, 1.0])
+        out = tmp_path / "hist_cos.png"
+        plot_distance_histogram(
+            distances, save_path=out, axis_label="Cosine Distance (1-cos)"
+        )
+        assert out.exists()
+        assert out.stat().st_size > 0
 
 
 # ------------------------------------------------------------------ #
@@ -383,3 +457,51 @@ class TestStoreAnalysis:
         assert sim.force_comparisons >= 1
         assert sim.rescued_by_forces >= 1
         assert sim.kept == 2
+
+
+# ------------------------------------------------------------------ #
+#  Deduplication screen
+# ------------------------------------------------------------------ #
+
+
+class TestDedupScreenValidation:
+    def _screen(self):
+        from rapmat.storage import SQLiteStore
+        from rapmat.tui.app import RapmatApp
+        from rapmat.tui.screens.dedup import DedupScreen
+        from rapmat.tui.state import AppState
+
+        store = SQLiteStore(":memory:")
+        state = AppState(store=store)
+        app = RapmatApp(state)
+        screen = DedupScreen(state, app._router)
+        return screen, screen.build()
+
+    def test_renders_with_new_fields(self):
+        screen, widget = self._screen()
+        canv = widget.render((121, 40), focus=True)
+        assert canv is not None
+
+    def test_defaults_pass_validation(self):
+        screen, _ = self._screen()
+        vals = screen._form.get_values()
+        vals["metric"] = "euclidean"
+        assert screen._validate(vals) == []
+
+    def test_cosine_threshold_out_of_range(self):
+        screen, _ = self._screen()
+        vals = screen._form.get_values()
+        vals["dedup_threshold"] = 2.5
+
+        vals["metric"] = "cosine"
+        assert screen._validate(vals)
+
+        vals["metric"] = "euclidean"
+        assert screen._validate(vals) == []
+
+    def test_threshold_must_be_positive(self):
+        screen, _ = self._screen()
+        vals = screen._form.get_values()
+        vals["metric"] = "euclidean"
+        vals["dedup_threshold"] = 0.0
+        assert screen._validate(vals)

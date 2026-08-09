@@ -60,15 +60,45 @@ class DedupSimulationResult:
 DEFAULT_SOAP_R_CUT = 6.0
 DEFAULT_SOAP_N_MAX = 8
 DEFAULT_SOAP_L_MAX = 6
+DEFAULT_SOAP_SIGMA = 1.0
 DEFAULT_SURVIVAL_TARGETS = [95, 90, 75, 50, 25, 10, 5]
+
+@dataclass(frozen=True)
+class MetricSpec:
+    """How one distance metric is named across the UI and plots."""
+
+    choice: str
+    short: str
+    axis: str
+    hint: str
+
+
+METRICS: dict[str, MetricSpec] = {
+    "euclidean": MetricSpec(
+        choice="L2",
+        short="L2",
+        axis="L2 Distance",
+        hint="Using scale-dependent L2 distance",
+    ),
+    "cosine": MetricSpec(
+        choice="L2+norm",
+        short="L2+norm",
+        axis="Cosine Distance (1-cos)",
+        hint="Using scale-independent L2 (1 - cos) on the normalized set",
+    ),
+}
+
+METRIC_BY_CHOICE = {spec.choice: key for key, spec in METRICS.items()}
 
 
 class DedupAnalysisError(Exception):
     """A run cannot be analysed."""
 
 
-def compute_pairwise_distances(vectors: np.ndarray) -> np.ndarray:
-    return pdist(vectors, metric="euclidean")
+def compute_pairwise_distances(
+    vectors: np.ndarray, metric: str = "euclidean"
+) -> np.ndarray:
+    return pdist(vectors, metric=metric)
 
 
 @dataclass
@@ -84,14 +114,16 @@ def _sorted_with_vectors(structures: list) -> list:
     return with_vec
 
 
-def prepare_distances(structures: list) -> PreparedDistances:
+def prepare_distances(
+    structures: list, metric: str = "euclidean"
+) -> PreparedDistances:
     with_vec = _sorted_with_vectors(structures)
     if not with_vec:
         return PreparedDistances(
             with_vec=[], dist_sq=np.empty((0, 0)), condensed=np.empty((0,))
         )
     mat = np.vstack([s.descriptor for s in with_vec])
-    condensed = pdist(mat, metric="euclidean")
+    condensed = pdist(mat, metric=metric)
     return PreparedDistances(with_vec, squareform(condensed), condensed)
 
 
@@ -105,6 +137,7 @@ def simulate_deduplication(
     angle_tol: float = 5.0,
     use_forces: bool = False,
     force_cosine_threshold: float = 0.95,
+    metric: str = "euclidean",
     dist_sq: np.ndarray | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> DedupSimulationResult:
@@ -119,7 +152,7 @@ def simulate_deduplication(
     N = len(with_vec)
     if dist_sq is None:
         mat = np.vstack([s.descriptor for s in with_vec])
-        dist_sq = squareform(pdist(mat, metric="euclidean"))
+        dist_sq = squareform(pdist(mat, metric=metric))
 
     matcher = None
     if use_pymatgen and StructureMatcher is not None:
@@ -301,6 +334,7 @@ class DedupAnalysis:
     run_name: str
     stage: str
     threshold: float
+    metric: str
     structures: list
     prep: PreparedDistances
     sim: DedupSimulationResult
@@ -338,6 +372,7 @@ class DedupAnalysis:
             angle_tol=self.angle_tol,
             use_forces=self.use_forces,
             force_cosine_threshold=self.force_cosine_threshold,
+            metric=self.metric,
             dist_sq=self.prep.dist_sq,
             progress_callback=progress_callback,
         )
@@ -354,6 +389,7 @@ class DedupAnalysis:
             "std_dist": self.std_dist,
             "below_thresh": self.below_thresh,
             "threshold": self.threshold,
+            "metric": self.metric,
             "sim": self.sim,
             "percentiles": self.percentiles,
             "distances": self.distances,
@@ -370,9 +406,11 @@ def run_dedup_analysis(
     *,
     stage: str = "relaxed",
     threshold: float = 1e-2,
+    metric: str = "euclidean",
     soap_r_cut: float = DEFAULT_SOAP_R_CUT,
     soap_n_max: int = DEFAULT_SOAP_N_MAX,
     soap_l_max: int = DEFAULT_SOAP_L_MAX,
+    soap_sigma: float = DEFAULT_SOAP_SIGMA,
     use_pymatgen: bool = False,
     ltol: float = 0.2,
     stol: float = 0.3,
@@ -391,6 +429,9 @@ def run_dedup_analysis(
     if survival_targets is None:
         survival_targets = DEFAULT_SURVIVAL_TARGETS
 
+    if metric not in METRICS:
+        raise DedupAnalysisError(f"Unknown distance metric '{metric}'")
+
     def _emit(current: int, total: int, message: str, is_log: bool = False) -> None:
         if progress_callback:
             progress_callback(current, total, message, is_log=is_log)
@@ -408,6 +449,7 @@ def run_dedup_analysis(
         r_cut=soap_r_cut,
         n_max=int(soap_n_max),
         l_max=int(soap_l_max),
+        sigma=soap_sigma,
     )
 
     statuses = (
@@ -429,7 +471,7 @@ def run_dedup_analysis(
         s.descriptor = descriptor.compute(s.atoms)
 
     _emit(2, 5, "Computing pairwise distances")
-    prep = prepare_distances(structures)
+    prep = prepare_distances(structures, metric=metric)
     distances = prep.condensed
 
     _emit(3, 5, "Simulating deduplication", is_log=True)
@@ -442,6 +484,7 @@ def run_dedup_analysis(
         angle_tol=angle_tol,
         use_forces=use_forces,
         force_cosine_threshold=force_cosine_threshold,
+        metric=metric,
         dist_sq=prep.dist_sq,
         progress_callback=progress_callback,
     )
@@ -459,6 +502,7 @@ def run_dedup_analysis(
         run_name=run_name,
         stage=stage,
         threshold=threshold,
+        metric=metric,
         structures=structures,
         prep=prep,
         sim=sim,
@@ -487,6 +531,7 @@ def plot_distance_histogram(
     threshold: Optional[float] = None,
     save_path: Path | str | None = None,
     title: str = "Pairwise Descriptor Distance Distribution",
+    axis_label: str = "L2 Distance",
     bins: int = 200,
 ) -> None:
     import matplotlib
@@ -503,7 +548,7 @@ def plot_distance_histogram(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
 
     ax1.hist(distances, bins=bins, edgecolor="none", alpha=0.75)
-    ax1.set_xlabel("L2 Distance")
+    ax1.set_xlabel(axis_label)
     ax1.set_ylabel("Pair Count")
     ax1.set_title(title)
 
@@ -523,7 +568,7 @@ def plot_distance_histogram(
         edgecolor="none",
         alpha=0.75,
     )
-    ax2.set_xlabel("L2 Distance to Closest Neighbor")
+    ax2.set_xlabel(f"{axis_label} to Closest Neighbor")
     ax2.set_ylabel("Structure Count")
     ax2.set_title("Closest Neighbor Distance Distribution")
 

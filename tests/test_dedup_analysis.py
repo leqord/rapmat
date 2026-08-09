@@ -499,6 +499,33 @@ class TestDedupScreenValidation:
         vals["metric"] = "euclidean"
         assert screen._validate(vals) == []
 
+    def test_metric_switch_resets_threshold_to_its_default(self):
+        from rapmat.core.dedup_analysis import METRICS
+
+        screen, _ = self._screen()
+        dd = screen._form.get_widget("metric")
+
+        assert (screen._form.get_values()["dedup_threshold"]
+                == pytest.approx(METRICS["euclidean"].default_threshold))
+
+        dd._pick(None, dd.options.index(METRICS["cosine"].choice))
+        assert (screen._form.get_values()["dedup_threshold"]
+                == pytest.approx(METRICS["cosine"].default_threshold))
+
+        dd._pick(None, dd.options.index(METRICS["euclidean"].choice))
+        assert (screen._form.get_values()["dedup_threshold"]
+                == pytest.approx(METRICS["euclidean"].default_threshold))
+
+    def test_each_metric_default_passes_validation(self):
+        from rapmat.core.dedup_analysis import METRICS
+
+        screen, _ = self._screen()
+        for key, spec in METRICS.items():
+            vals = screen._form.get_values()
+            vals["metric"] = key
+            vals["dedup_threshold"] = spec.default_threshold
+            assert screen._validate(vals) == [], key
+
     def test_threshold_must_be_positive(self):
         screen, _ = self._screen()
         vals = screen._form.get_values()

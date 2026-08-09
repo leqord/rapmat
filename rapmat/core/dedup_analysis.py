@@ -65,12 +65,11 @@ DEFAULT_SURVIVAL_TARGETS = [95, 90, 75, 50, 25, 10, 5]
 
 @dataclass(frozen=True)
 class MetricSpec:
-    """How one distance metric is named across the UI and plots."""
-
     choice: str
     short: str
     axis: str
     hint: str
+    default_threshold: float
 
 
 METRICS: dict[str, MetricSpec] = {
@@ -79,12 +78,14 @@ METRICS: dict[str, MetricSpec] = {
         short="L2",
         axis="L2 Distance",
         hint="Using scale-dependent L2 distance",
+        default_threshold=1e-2,
     ),
     "cosine": MetricSpec(
         choice="L2+norm",
         short="L2+norm",
         axis="Cosine Distance (1-cos)",
         hint="Using scale-independent L2 (1 - cos) on the normalized set",
+        default_threshold=1e-7,
     ),
 }
 

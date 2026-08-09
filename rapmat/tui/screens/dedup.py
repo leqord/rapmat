@@ -138,7 +138,8 @@ class DedupScreen(ScreenBase):
             [
                 dropdown_field("run_name", "Run", run_opts, default=default_idx),
                 dropdown_field("stage", "Stage", ["relaxed", ], default=0),
-                float_field("dedup_threshold", "Threshold", default=1e-2),
+                float_field("dedup_threshold", "Threshold",
+                            default=METRICS["euclidean"].default_threshold),
                 dropdown_field(
                     "metric", "Metric",
                     list(METRIC_BY_CHOICE), default=0,
@@ -222,10 +223,9 @@ class DedupScreen(ScreenBase):
         return urwid.Frame(body=body)
 
     def _on_metric_change(self, _widget, option: str) -> None:
-        metric = self._metric_by_choice.get(option, "euclidean")
-        self._metric_hint.set_text(
-            ("details", f"  {self._metrics[metric].hint}")
-        )
+        spec = self._metrics[self._metric_by_choice.get(option, "euclidean")]
+        self._form.set_values({"dedup_threshold": spec.default_threshold})
+        self._metric_hint.set_text(("details", f"  {spec.hint}"))
 
     # ------------------------------------------------------------------ #
     #  Submit

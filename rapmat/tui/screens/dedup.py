@@ -120,7 +120,8 @@ class DedupScreen(ScreenBase):
         return names if names else ["(no runs)"]
 
     def _build_frame(self) -> urwid.Frame:
-        from rapmat.core.dedup_analysis import (DEFAULT_SOAP_L_MAX,
+        from rapmat.core.dedup_analysis import (DEFAULT_ENERGY_WINDOW,
+                                                DEFAULT_SOAP_L_MAX,
                                                 DEFAULT_SOAP_N_MAX,
                                                 DEFAULT_SOAP_R_CUT,
                                                 DEFAULT_SOAP_SIGMA,
@@ -150,6 +151,9 @@ class DedupScreen(ScreenBase):
                 float_field("pymatgen_angle", "Pymatgen angle tol", default=5.0),
                 checkbox_field("force_dedup", "Force dedup", default=False),
                 float_field("force_cosine", "Force cosine thresh", default=0.95),
+                checkbox_field("energy_dedup", "Energy dedup", default=False),
+                float_field("energy_window", "Energy window (eV/atom)",
+                            default=DEFAULT_ENERGY_WINDOW),
                 float_field("soap_r_cut", "SOAP r_cut", default=DEFAULT_SOAP_R_CUT),
                 int_field("soap_n_max", "SOAP n_max", default=DEFAULT_SOAP_N_MAX),
                 int_field("soap_l_max", "SOAP l_max", default=DEFAULT_SOAP_L_MAX),
@@ -163,6 +167,7 @@ class DedupScreen(ScreenBase):
                     "pymatgen_stol", "pymatgen_angle",
                 ]),
                 ("Forces", ["force_dedup", "force_cosine"]),
+                ("Energy", ["energy_dedup", "energy_window"]),
                 ("SOAP Descriptor", [
                     "soap_r_cut", "soap_n_max", "soap_l_max", "soap_sigma",
                 ]),
@@ -240,6 +245,8 @@ class DedupScreen(ScreenBase):
             errors.append(
                 f"Threshold must be < 2 for the {self._metrics['cosine'].short} metric"
             )
+        if vals["energy_dedup"] and vals["energy_window"] <= 0:
+            errors.append("Energy window must be > 0")
         return errors
 
     def _on_start(self, _btn=None) -> None:
@@ -291,6 +298,9 @@ class DedupScreen(ScreenBase):
                 angle_tol=vals["pymatgen_angle"],
                 use_forces=vals["force_dedup"],
                 force_cosine_threshold=vals["force_cosine"],
+                energy_window=(
+                    vals["energy_window"] if vals["energy_dedup"] else None
+                ),
                 progress_callback=progress.as_callback(
                     raise_on_cancel=False, default_is_log=False
                 ),
@@ -359,6 +369,13 @@ class DedupScreen(ScreenBase):
         )
 
         # -- Waterfall table ------------------------------------------ #
+        after_vec = (
+            sim.total
+            - sim.dropped_by_vector
+            - sim.rescued_by_energy
+            - sim.rescued_by_pymatgen
+            - sim.rescued_by_forces
+        )
         waterfall_rows = [
             {
                 "stage": "Initial",
@@ -367,47 +384,35 @@ class DedupScreen(ScreenBase):
                 "notes": f"All {d['stage']}",
             },
             {
-                "stage": "Stage 1: Vector (L2)",
-                "kept": str(
-                    sim.total
-                    - sim.dropped_by_vector
-                    - sim.rescued_by_pymatgen
-                    - sim.rescued_by_forces
-                ),
-                "change": f"-{sim.dropped_by_vector + sim.rescued_by_pymatgen + sim.rescued_by_forces}",
+                "stage": f"Stage 1: Vector ({self._metrics[d['metric']].short})",
+                "kept": str(after_vec),
+                "change": f"-{sim.total - after_vec}",
                 "notes": f"threshold < {d['threshold']}",
             },
         ]
-        if d["use_pymatgen"]:
-            after_vec = (
-                sim.total
-                - sim.dropped_by_vector
-                - sim.rescued_by_pymatgen
-                - sim.rescued_by_forces
-            )
+
+        running, stage_no = after_vec, 2
+        for enabled, rescued, label, notes in (
+            (d.get("energy_window") is not None, sim.rescued_by_energy, "Energy",
+             f"{sim.energy_mismatches}/{sim.energy_comparisons} above window"),
+            (d["use_pymatgen"], sim.rescued_by_pymatgen, "Pymatgen",
+             f"{sim.pymatgen_mismatches}/{sim.pymatgen_comparisons} collisions"),
+            (d["use_forces"], sim.rescued_by_forces, "Forces",
+             f"{sim.force_mismatches}/{sim.force_comparisons} disagreements"),
+        ):
+            if not enabled:
+                continue
+            running += rescued
             waterfall_rows.append(
                 {
-                    "stage": "Stage 2: Pymatgen",
-                    "kept": str(after_vec + sim.rescued_by_pymatgen),
-                    "change": (
-                        f"+{sim.rescued_by_pymatgen}"
-                        if sim.rescued_by_pymatgen
-                        else "0"
-                    ),
-                    "notes": f"{sim.pymatgen_mismatches}/{sim.pymatgen_comparisons} collisions",
+                    "stage": f"Stage {stage_no}: {label}",
+                    "kept": str(running),
+                    "change": f"+{rescued}" if rescued else "0",
+                    "notes": notes,
                 }
             )
-        if d["use_forces"]:
-            waterfall_rows.append(
-                {
-                    "stage": "Stage 3: Forces",
-                    "kept": str(sim.kept),
-                    "change": (
-                        f"+{sim.rescued_by_forces}" if sim.rescued_by_forces else "0"
-                    ),
-                    "notes": f"{sim.force_mismatches}/{sim.force_comparisons} disagreements",
-                }
-            )
+            stage_no += 1
+
         waterfall_rows.append(
             {
                 "stage": "Final",
@@ -443,6 +448,21 @@ class DedupScreen(ScreenBase):
 
         # -- Collision summary ------------------------- #
         collision_widgets = []
+        if d.get("energy_window") is not None and sim.energy_comparisons > 0:
+            rate = 100 * sim.energy_mismatches / sim.energy_comparisons
+            agrees = sim.energy_comparisons - sim.energy_mismatches
+            collision_widgets.append(
+                urwid.Text(
+                    [
+                        ("form_label", "  Energy:   "),
+                        ("details", f"{sim.energy_comparisons} comparisons, "),
+                        ("success", f"{agrees} within {d['energy_window']:g} eV/atom"),
+                        ("details", ", "),
+                        ("unconv" if sim.energy_mismatches > 0 else "details",
+                         f"{sim.energy_mismatches} beyond ({rate:.1f}%)"),
+                    ]
+                )
+            )
         if d["use_pymatgen"] and sim.pymatgen_comparisons > 0:
             rate = 100 * sim.pymatgen_mismatches / sim.pymatgen_comparisons
             agrees = sim.pymatgen_comparisons - sim.pymatgen_mismatches

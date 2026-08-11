@@ -43,12 +43,15 @@ class DedupSimulationResult:
     dropped_by_vector: int = 0
     rescued_by_pymatgen: int = 0
     rescued_by_forces: int = 0
+    rescued_by_energy: int = 0
     final_dropped: int = 0
 
     pymatgen_comparisons: int = 0
     pymatgen_mismatches: int = 0
     force_comparisons: int = 0
     force_mismatches: int = 0
+    energy_comparisons: int = 0
+    energy_mismatches: int = 0
 
     kept_ids: list[str] = field(default_factory=list)
     dropped_ids: list[str] = field(default_factory=list)
@@ -61,6 +64,7 @@ DEFAULT_SOAP_R_CUT = 6.0
 DEFAULT_SOAP_N_MAX = 8
 DEFAULT_SOAP_L_MAX = 6
 DEFAULT_SOAP_SIGMA = 1.0
+DEFAULT_ENERGY_WINDOW = 1e-3
 DEFAULT_SURVIVAL_TARGETS = [95, 90, 75, 50, 25, 10, 5]
 
 @dataclass(frozen=True)
@@ -102,6 +106,11 @@ def compute_pairwise_distances(
     return pdist(vectors, metric=metric)
 
 
+def energy_merge_mask(energies: list[float], window: float) -> np.ndarray:
+    e = np.asarray(energies, dtype=float)
+    return np.abs(e[:, None] - e[None, :]) <= window
+
+
 @dataclass
 class PreparedDistances:
     with_vec: list["Structure"]
@@ -138,6 +147,7 @@ def simulate_deduplication(
     angle_tol: float = 5.0,
     use_forces: bool = False,
     force_cosine_threshold: float = 0.95,
+    energy_window: float | None = None,
     metric: str = "euclidean",
     dist_sq: np.ndarray | None = None,
     progress_callback: ProgressCallback | None = None,
@@ -179,7 +189,16 @@ def simulate_deduplication(
             result.dropped_by_vector += 1
             confirmed = True
 
-            if matcher is not None:
+            if energy_window is not None:
+                result.energy_comparisons += 1
+                if abs(with_vec[i].energy_per_atom
+                       - with_vec[j].energy_per_atom) > energy_window:
+                    result.energy_mismatches += 1
+                    result.rescued_by_energy += 1
+                    result.dropped_by_vector -= 1
+                    confirmed = False
+
+            if confirmed and matcher is not None:
                 result.pymatgen_comparisons += 1
                 try:
                     pmg_i = _to_pymatgen(with_vec[i].atoms)
@@ -239,7 +258,11 @@ def simulate_deduplication(
     return result
 
 
-def _greedy_dedup_count(dist_sq: np.ndarray, threshold: float) -> int:
+def _greedy_dedup_count(
+    dist_sq: np.ndarray,
+    threshold: float,
+    merge_ok: np.ndarray | None = None,
+) -> int:
     N = dist_sq.shape[0]
     alive = np.ones(N, dtype=bool)
     for i in range(N):
@@ -247,6 +270,8 @@ def _greedy_dedup_count(dist_sq: np.ndarray, threshold: float) -> int:
             continue
 
         neigh = dist_sq[i] < threshold
+        if merge_ok is not None:
+            neigh &= merge_ok[i]
         neigh[: i + 1] = False
         alive[neigh] = False
     return int(alive.sum())
@@ -256,9 +281,8 @@ def survival_thresholds(
     dist_sq: np.ndarray,
     condensed: np.ndarray,
     ratios: list[float],
+    merge_ok: np.ndarray | None = None,
 ) -> list[tuple[float, int]]:
-    """For each ratio, the distance threshold whose greedy deduplication keeps ~that
-    fraction of structures (binary search over the observed distances)."""
     N = int(dist_sq.shape[0])
     if N == 0:
         return [(0.0, 0) for _ in ratios]
@@ -271,11 +295,11 @@ def survival_thresholds(
     def kept_at(k: int) -> int:
         v = cache.get(k)
         if v is None:
-            v = _greedy_dedup_count(dist_sq, float(candidates[k]))
+            v = _greedy_dedup_count(dist_sq, float(candidates[k]), merge_ok)
             cache[k] = v
         return v
 
-    eps_kept = _greedy_dedup_count(dist_sq, 1e-12) if M == 0 else None
+    eps_kept = _greedy_dedup_count(dist_sq, 1e-12, merge_ok) if M == 0 else None
 
     results: list[tuple[float, int]] = []
     for ratio in ratios:
@@ -329,9 +353,6 @@ def find_threshold_for_survival(
 
 @dataclass
 class DedupAnalysis:
-    """Outcome of a full dedup analysis for one run.
-    """
-
     run_name: str
     stage: str
     threshold: float
@@ -357,13 +378,13 @@ class DedupAnalysis:
     stol: float
     angle_tol: float
     force_cosine_threshold: float
+    energy_window: float | None = None
 
     def simulate_at(
         self,
         threshold: float,
         progress_callback: ProgressCallback | None = None,
     ) -> DedupSimulationResult:
-        """Re-run the dedup simulation at ``threshold``, reusing descriptors."""
         return simulate_deduplication(
             self.structures,
             threshold=threshold,
@@ -373,6 +394,7 @@ class DedupAnalysis:
             angle_tol=self.angle_tol,
             use_forces=self.use_forces,
             force_cosine_threshold=self.force_cosine_threshold,
+            energy_window=self.energy_window,
             metric=self.metric,
             dist_sq=self.prep.dist_sq,
             progress_callback=progress_callback,
@@ -391,6 +413,7 @@ class DedupAnalysis:
             "below_thresh": self.below_thresh,
             "threshold": self.threshold,
             "metric": self.metric,
+            "energy_window": self.energy_window,
             "sim": self.sim,
             "percentiles": self.percentiles,
             "distances": self.distances,
@@ -418,12 +441,10 @@ def run_dedup_analysis(
     angle_tol: float = 5.0,
     use_forces: bool = False,
     force_cosine_threshold: float = 0.95,
+    energy_window: float | None = None,
     survival_targets: Optional[list[int]] = None,
     progress_callback: ProgressCallback | None = None,
 ) -> "DedupAnalysis":
-    """Run the full dedup pipeline for one run.
-    Raises :class:`DedupAnalysisError` when the run cannot be processed.
-    """
     from rapmat.storage import SOAPDescriptor
     from rapmat.storage.status import StructureStatus
 
@@ -475,6 +496,14 @@ def run_dedup_analysis(
     prep = prepare_distances(structures, metric=metric)
     distances = prep.condensed
 
+    merge_ok = (
+        energy_merge_mask(
+            [s.energy_per_atom for s in prep.with_vec], energy_window
+        )
+        if energy_window
+        else None
+    )
+
     _emit(3, 5, "Simulating deduplication", is_log=True)
     sim = simulate_deduplication(
         structures,
@@ -485,6 +514,7 @@ def run_dedup_analysis(
         angle_tol=angle_tol,
         use_forces=use_forces,
         force_cosine_threshold=force_cosine_threshold,
+        energy_window=energy_window,
         metric=metric,
         dist_sq=prep.dist_sq,
         progress_callback=progress_callback,
@@ -492,7 +522,8 @@ def run_dedup_analysis(
 
     _emit(4, 5, "Computing survival thresholds")
     surv = survival_thresholds(
-        prep.dist_sq, prep.condensed, [p / 100.0 for p in survival_targets]
+        prep.dist_sq, prep.condensed, [p / 100.0 for p in survival_targets],
+        merge_ok=merge_ok,
     )
     percentiles = [(p, t, k) for p, (t, k) in zip(survival_targets, surv)]
 
@@ -523,6 +554,7 @@ def run_dedup_analysis(
         stol=stol,
         angle_tol=angle_tol,
         force_cosine_threshold=force_cosine_threshold,
+        energy_window=energy_window,
     )
 
 

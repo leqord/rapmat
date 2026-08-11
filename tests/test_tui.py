@@ -878,8 +878,9 @@ class TestScreenBuildSmoke:
         d = dict(
             sim=sim, n_structs=6, n_pairs=15, min_dist=0.1, max_dist=2.0,
             mean_dist=1.0, median_dist=0.9, std_dist=0.3, below_thresh=3,
-            threshold=1e-2, percentiles=[(50, 1.0, 3)], distances=None,
-            stage="relaxed", run_name="r", use_pymatgen=False, use_forces=False,
+            threshold=1e-2, metric="euclidean", percentiles=[(50, 1.0, 3)],
+            distances=None, stage="relaxed", run_name="r",
+            use_pymatgen=False, use_forces=False,
         )
         s._result_data = d
         s._show_results_overlay(d)

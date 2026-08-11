@@ -120,9 +120,15 @@ class DedupScreen(ScreenBase):
         return names if names else ["(no runs)"]
 
     def _build_frame(self) -> urwid.Frame:
-        from rapmat.core.dedup_analysis import (DEFAULT_SOAP_L_MAX,
+        from rapmat.core.dedup_analysis import (DEFAULT_ENERGY_WINDOW,
+                                                DEFAULT_SOAP_L_MAX,
                                                 DEFAULT_SOAP_N_MAX,
-                                                DEFAULT_SOAP_R_CUT)
+                                                DEFAULT_SOAP_R_CUT,
+                                                DEFAULT_SOAP_SIGMA,
+                                                METRIC_BY_CHOICE, METRICS)
+
+        self._metrics = METRICS
+        self._metric_by_choice = METRIC_BY_CHOICE
 
         run_opts = self._run_options()
         default_idx = 0
@@ -133,28 +139,47 @@ class DedupScreen(ScreenBase):
             [
                 dropdown_field("run_name", "Run", run_opts, default=default_idx),
                 dropdown_field("stage", "Stage", ["relaxed", ], default=0),
-                float_field("dedup_threshold", "Dedup threshold", default=1e-2),
+                float_field("dedup_threshold", "Threshold",
+                            default=METRICS["euclidean"].default_threshold),
+                dropdown_field(
+                    "metric", "Metric",
+                    list(METRIC_BY_CHOICE), default=0,
+                ),
                 checkbox_field("pymatgen_dedup", "Pymatgen dedup", default=False),
                 float_field("pymatgen_ltol", "Pymatgen ltol", default=0.2),
                 float_field("pymatgen_stol", "Pymatgen stol", default=0.3),
                 float_field("pymatgen_angle", "Pymatgen angle tol", default=5.0),
                 checkbox_field("force_dedup", "Force dedup", default=False),
                 float_field("force_cosine", "Force cosine thresh", default=0.95),
+                checkbox_field("energy_dedup", "Energy dedup", default=False),
+                float_field("energy_window", "Energy window (eV/atom)",
+                            default=DEFAULT_ENERGY_WINDOW),
                 float_field("soap_r_cut", "SOAP r_cut", default=DEFAULT_SOAP_R_CUT),
                 int_field("soap_n_max", "SOAP n_max", default=DEFAULT_SOAP_N_MAX),
                 int_field("soap_l_max", "SOAP l_max", default=DEFAULT_SOAP_L_MAX),
+                float_field("soap_sigma", "SOAP sigma", default=DEFAULT_SOAP_SIGMA),
             ],
             label_width=22,
             groups=[
-                ("General", ["run_name", "stage", "dedup_threshold"]),
+                ("General", ["run_name", "stage", "dedup_threshold", "metric"]),
                 ("Pymatgen", [
                     "pymatgen_dedup", "pymatgen_ltol",
                     "pymatgen_stol", "pymatgen_angle",
                 ]),
                 ("Forces", ["force_dedup", "force_cosine"]),
-                ("SOAP Descriptor", ["soap_r_cut", "soap_n_max", "soap_l_max"]),
+                ("Energy", ["energy_dedup", "energy_window"]),
+                ("SOAP Descriptor", [
+                    "soap_r_cut", "soap_n_max", "soap_l_max", "soap_sigma",
+                ]),
             ],
         )
+
+        self._metric_hint = urwid.Text(
+            ("details", f"  {METRICS['euclidean'].hint}")
+        )
+        metric_widget = self._form.get_widget("metric")
+        if metric_widget is not None:
+            urwid.connect_signal(metric_widget, "change", self._on_metric_change)
 
         self._error_text = urwid.Text("")
 
@@ -176,6 +201,7 @@ class DedupScreen(ScreenBase):
             urwid.SimpleListWalker(
                 [
                     self._form,
+                    self._metric_hint,
                     urwid.Divider(),
                     urwid.Columns(
                         [(18, start_btn), (18, clear_btn)], dividechars=1
@@ -201,13 +227,39 @@ class DedupScreen(ScreenBase):
         self.refresh_footer()
         return urwid.Frame(body=body)
 
+    def _on_metric_change(self, _widget, option: str) -> None:
+        spec = self._metrics[self._metric_by_choice.get(option, "euclidean")]
+        self._form.set_values({"dedup_threshold": spec.default_threshold})
+        self._metric_hint.set_text(("details", f"  {spec.hint}"))
+
     # ------------------------------------------------------------------ #
     #  Submit
     # ------------------------------------------------------------------ #
 
+    def _validate(self, vals: dict) -> list[str]:
+        errors = self._form.validate()
+        threshold = vals["dedup_threshold"]
+        if threshold <= 0:
+            errors.append("Threshold must be > 0")
+        elif vals["metric"] == "cosine" and threshold >= 2:
+            errors.append(
+                f"Threshold must be < 2 for the {self._metrics['cosine'].short} metric"
+            )
+        if vals["energy_dedup"] and vals["energy_window"] <= 0:
+            errors.append("Energy window must be > 0")
+        return errors
+
     def _on_start(self, _btn=None) -> None:
         if self._running or self._applying:
             return
+
+        vals = self._form.get_values()
+        vals["metric"] = self._metric_by_choice.get(vals["metric"], "euclidean")
+        errors = self._validate(vals)
+        if errors:
+            self._error_text.set_text(("form_error", " " + "; ".join(errors)))
+            return
+
         self._running = True
         self._applied = False
         self._error_text.set_text("")
@@ -216,8 +268,6 @@ class DedupScreen(ScreenBase):
         # Close any existing overlay
         if self._overlay_open:
             self._close_overlay()
-
-        vals = self._form.get_values()
 
         self.run_task(
             lambda prog: self._worker(prog, vals),
@@ -237,15 +287,20 @@ class DedupScreen(ScreenBase):
                 vals["run_name"],
                 stage=vals["stage"],
                 threshold=vals["dedup_threshold"],
+                metric=vals["metric"],
                 soap_r_cut=vals["soap_r_cut"],
                 soap_n_max=int(vals["soap_n_max"]),
                 soap_l_max=int(vals["soap_l_max"]),
+                soap_sigma=vals["soap_sigma"],
                 use_pymatgen=vals["pymatgen_dedup"],
                 ltol=vals["pymatgen_ltol"],
                 stol=vals["pymatgen_stol"],
                 angle_tol=vals["pymatgen_angle"],
                 use_forces=vals["force_dedup"],
                 force_cosine_threshold=vals["force_cosine"],
+                energy_window=(
+                    vals["energy_window"] if vals["energy_dedup"] else None
+                ),
                 progress_callback=progress.as_callback(
                     raise_on_cancel=False, default_is_log=False
                 ),
@@ -314,6 +369,13 @@ class DedupScreen(ScreenBase):
         )
 
         # -- Waterfall table ------------------------------------------ #
+        after_vec = (
+            sim.total
+            - sim.dropped_by_vector
+            - sim.rescued_by_energy
+            - sim.rescued_by_pymatgen
+            - sim.rescued_by_forces
+        )
         waterfall_rows = [
             {
                 "stage": "Initial",
@@ -322,47 +384,35 @@ class DedupScreen(ScreenBase):
                 "notes": f"All {d['stage']}",
             },
             {
-                "stage": "Stage 1: Vector (L2)",
-                "kept": str(
-                    sim.total
-                    - sim.dropped_by_vector
-                    - sim.rescued_by_pymatgen
-                    - sim.rescued_by_forces
-                ),
-                "change": f"-{sim.dropped_by_vector + sim.rescued_by_pymatgen + sim.rescued_by_forces}",
+                "stage": f"Stage 1: Vector ({self._metrics[d['metric']].short})",
+                "kept": str(after_vec),
+                "change": f"-{sim.total - after_vec}",
                 "notes": f"threshold < {d['threshold']}",
             },
         ]
-        if d["use_pymatgen"]:
-            after_vec = (
-                sim.total
-                - sim.dropped_by_vector
-                - sim.rescued_by_pymatgen
-                - sim.rescued_by_forces
-            )
+
+        running, stage_no = after_vec, 2
+        for enabled, rescued, label, notes in (
+            (d.get("energy_window") is not None, sim.rescued_by_energy, "Energy",
+             f"{sim.energy_mismatches}/{sim.energy_comparisons} above window"),
+            (d["use_pymatgen"], sim.rescued_by_pymatgen, "Pymatgen",
+             f"{sim.pymatgen_mismatches}/{sim.pymatgen_comparisons} collisions"),
+            (d["use_forces"], sim.rescued_by_forces, "Forces",
+             f"{sim.force_mismatches}/{sim.force_comparisons} disagreements"),
+        ):
+            if not enabled:
+                continue
+            running += rescued
             waterfall_rows.append(
                 {
-                    "stage": "Stage 2: Pymatgen",
-                    "kept": str(after_vec + sim.rescued_by_pymatgen),
-                    "change": (
-                        f"+{sim.rescued_by_pymatgen}"
-                        if sim.rescued_by_pymatgen
-                        else "0"
-                    ),
-                    "notes": f"{sim.pymatgen_mismatches}/{sim.pymatgen_comparisons} collisions",
+                    "stage": f"Stage {stage_no}: {label}",
+                    "kept": str(running),
+                    "change": f"+{rescued}" if rescued else "0",
+                    "notes": notes,
                 }
             )
-        if d["use_forces"]:
-            waterfall_rows.append(
-                {
-                    "stage": "Stage 3: Forces",
-                    "kept": str(sim.kept),
-                    "change": (
-                        f"+{sim.rescued_by_forces}" if sim.rescued_by_forces else "0"
-                    ),
-                    "notes": f"{sim.force_mismatches}/{sim.force_comparisons} disagreements",
-                }
-            )
+            stage_no += 1
+
         waterfall_rows.append(
             {
                 "stage": "Final",
@@ -398,6 +448,21 @@ class DedupScreen(ScreenBase):
 
         # -- Collision summary ------------------------- #
         collision_widgets = []
+        if d.get("energy_window") is not None and sim.energy_comparisons > 0:
+            rate = 100 * sim.energy_mismatches / sim.energy_comparisons
+            agrees = sim.energy_comparisons - sim.energy_mismatches
+            collision_widgets.append(
+                urwid.Text(
+                    [
+                        ("form_label", "  Energy:   "),
+                        ("details", f"{sim.energy_comparisons} comparisons, "),
+                        ("success", f"{agrees} within {d['energy_window']:g} eV/atom"),
+                        ("details", ", "),
+                        ("unconv" if sim.energy_mismatches > 0 else "details",
+                         f"{sim.energy_mismatches} beyond ({rate:.1f}%)"),
+                    ]
+                )
+            )
         if d["use_pymatgen"] and sim.pymatgen_comparisons > 0:
             rate = 100 * sim.pymatgen_mismatches / sim.pymatgen_comparisons
             agrees = sim.pymatgen_comparisons - sim.pymatgen_mismatches
@@ -506,6 +571,7 @@ class DedupScreen(ScreenBase):
 
         run_name = d["run_name"]
         stage = d["stage"]
+        metric = self._metrics[d["metric"]].short
         overlay_body = urwid.Frame(
             body=scrollable_body,
             footer=footer,
@@ -513,7 +579,7 @@ class DedupScreen(ScreenBase):
 
         inner = urwid.LineBox(
             urwid.Padding(overlay_body, left=1, right=1),
-            title=f" Deduplication: {run_name} ({stage}) ",
+            title=f"Deduplication: {run_name} ({stage}, {metric}) ",
         )
 
         overlay = urwid.Overlay(
@@ -560,6 +626,7 @@ class DedupScreen(ScreenBase):
                 threshold=d["threshold"],
                 save_path=plot_path,
                 title=f"Pairwise Distance Distribution - {d['run_name']} ({d['stage']})",
+                axis_label=self._metrics[d["metric"]].axis,
             )
             if self._state.status_bar:
                 self._state.status_bar.set_message(f"Plot saved to {plot_path}")

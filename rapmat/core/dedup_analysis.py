@@ -43,12 +43,15 @@ class DedupSimulationResult:
     dropped_by_vector: int = 0
     rescued_by_pymatgen: int = 0
     rescued_by_forces: int = 0
+    rescued_by_energy: int = 0
     final_dropped: int = 0
 
     pymatgen_comparisons: int = 0
     pymatgen_mismatches: int = 0
     force_comparisons: int = 0
     force_mismatches: int = 0
+    energy_comparisons: int = 0
+    energy_mismatches: int = 0
 
     kept_ids: list[str] = field(default_factory=list)
     dropped_ids: list[str] = field(default_factory=list)
@@ -60,15 +63,52 @@ class DedupSimulationResult:
 DEFAULT_SOAP_R_CUT = 6.0
 DEFAULT_SOAP_N_MAX = 8
 DEFAULT_SOAP_L_MAX = 6
+DEFAULT_SOAP_SIGMA = 1.0
+DEFAULT_ENERGY_WINDOW = 1e-3
 DEFAULT_SURVIVAL_TARGETS = [95, 90, 75, 50, 25, 10, 5]
+
+@dataclass(frozen=True)
+class MetricSpec:
+    choice: str
+    short: str
+    axis: str
+    hint: str
+    default_threshold: float
+
+
+METRICS: dict[str, MetricSpec] = {
+    "euclidean": MetricSpec(
+        choice="L2",
+        short="L2",
+        axis="L2 Distance",
+        hint="Using scale-dependent L2 distance",
+        default_threshold=1e-2,
+    ),
+    "cosine": MetricSpec(
+        choice="L2+norm",
+        short="L2+norm",
+        axis="Cosine Distance (1-cos)",
+        hint="Using scale-independent L2 (1 - cos) on the normalized set",
+        default_threshold=1e-7,
+    ),
+}
+
+METRIC_BY_CHOICE = {spec.choice: key for key, spec in METRICS.items()}
 
 
 class DedupAnalysisError(Exception):
     """A run cannot be analysed."""
 
 
-def compute_pairwise_distances(vectors: np.ndarray) -> np.ndarray:
-    return pdist(vectors, metric="euclidean")
+def compute_pairwise_distances(
+    vectors: np.ndarray, metric: str = "euclidean"
+) -> np.ndarray:
+    return pdist(vectors, metric=metric)
+
+
+def energy_merge_mask(energies: list[float], window: float) -> np.ndarray:
+    e = np.asarray(energies, dtype=float)
+    return np.abs(e[:, None] - e[None, :]) <= window
 
 
 @dataclass
@@ -84,14 +124,16 @@ def _sorted_with_vectors(structures: list) -> list:
     return with_vec
 
 
-def prepare_distances(structures: list) -> PreparedDistances:
+def prepare_distances(
+    structures: list, metric: str = "euclidean"
+) -> PreparedDistances:
     with_vec = _sorted_with_vectors(structures)
     if not with_vec:
         return PreparedDistances(
             with_vec=[], dist_sq=np.empty((0, 0)), condensed=np.empty((0,))
         )
     mat = np.vstack([s.descriptor for s in with_vec])
-    condensed = pdist(mat, metric="euclidean")
+    condensed = pdist(mat, metric=metric)
     return PreparedDistances(with_vec, squareform(condensed), condensed)
 
 
@@ -105,6 +147,8 @@ def simulate_deduplication(
     angle_tol: float = 5.0,
     use_forces: bool = False,
     force_cosine_threshold: float = 0.95,
+    energy_window: float | None = None,
+    metric: str = "euclidean",
     dist_sq: np.ndarray | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> DedupSimulationResult:
@@ -119,7 +163,7 @@ def simulate_deduplication(
     N = len(with_vec)
     if dist_sq is None:
         mat = np.vstack([s.descriptor for s in with_vec])
-        dist_sq = squareform(pdist(mat, metric="euclidean"))
+        dist_sq = squareform(pdist(mat, metric=metric))
 
     matcher = None
     if use_pymatgen and StructureMatcher is not None:
@@ -145,7 +189,16 @@ def simulate_deduplication(
             result.dropped_by_vector += 1
             confirmed = True
 
-            if matcher is not None:
+            if energy_window is not None:
+                result.energy_comparisons += 1
+                if abs(with_vec[i].energy_per_atom
+                       - with_vec[j].energy_per_atom) > energy_window:
+                    result.energy_mismatches += 1
+                    result.rescued_by_energy += 1
+                    result.dropped_by_vector -= 1
+                    confirmed = False
+
+            if confirmed and matcher is not None:
                 result.pymatgen_comparisons += 1
                 try:
                     pmg_i = _to_pymatgen(with_vec[i].atoms)
@@ -205,7 +258,11 @@ def simulate_deduplication(
     return result
 
 
-def _greedy_dedup_count(dist_sq: np.ndarray, threshold: float) -> int:
+def _greedy_dedup_count(
+    dist_sq: np.ndarray,
+    threshold: float,
+    merge_ok: np.ndarray | None = None,
+) -> int:
     N = dist_sq.shape[0]
     alive = np.ones(N, dtype=bool)
     for i in range(N):
@@ -213,6 +270,8 @@ def _greedy_dedup_count(dist_sq: np.ndarray, threshold: float) -> int:
             continue
 
         neigh = dist_sq[i] < threshold
+        if merge_ok is not None:
+            neigh &= merge_ok[i]
         neigh[: i + 1] = False
         alive[neigh] = False
     return int(alive.sum())
@@ -222,9 +281,8 @@ def survival_thresholds(
     dist_sq: np.ndarray,
     condensed: np.ndarray,
     ratios: list[float],
+    merge_ok: np.ndarray | None = None,
 ) -> list[tuple[float, int]]:
-    """For each ratio, the distance threshold whose greedy deduplication keeps ~that
-    fraction of structures (binary search over the observed distances)."""
     N = int(dist_sq.shape[0])
     if N == 0:
         return [(0.0, 0) for _ in ratios]
@@ -237,11 +295,11 @@ def survival_thresholds(
     def kept_at(k: int) -> int:
         v = cache.get(k)
         if v is None:
-            v = _greedy_dedup_count(dist_sq, float(candidates[k]))
+            v = _greedy_dedup_count(dist_sq, float(candidates[k]), merge_ok)
             cache[k] = v
         return v
 
-    eps_kept = _greedy_dedup_count(dist_sq, 1e-12) if M == 0 else None
+    eps_kept = _greedy_dedup_count(dist_sq, 1e-12, merge_ok) if M == 0 else None
 
     results: list[tuple[float, int]] = []
     for ratio in ratios:
@@ -295,12 +353,10 @@ def find_threshold_for_survival(
 
 @dataclass
 class DedupAnalysis:
-    """Outcome of a full dedup analysis for one run.
-    """
-
     run_name: str
     stage: str
     threshold: float
+    metric: str
     structures: list
     prep: PreparedDistances
     sim: DedupSimulationResult
@@ -322,13 +378,13 @@ class DedupAnalysis:
     stol: float
     angle_tol: float
     force_cosine_threshold: float
+    energy_window: float | None = None
 
     def simulate_at(
         self,
         threshold: float,
         progress_callback: ProgressCallback | None = None,
     ) -> DedupSimulationResult:
-        """Re-run the dedup simulation at ``threshold``, reusing descriptors."""
         return simulate_deduplication(
             self.structures,
             threshold=threshold,
@@ -338,6 +394,8 @@ class DedupAnalysis:
             angle_tol=self.angle_tol,
             use_forces=self.use_forces,
             force_cosine_threshold=self.force_cosine_threshold,
+            energy_window=self.energy_window,
+            metric=self.metric,
             dist_sq=self.prep.dist_sq,
             progress_callback=progress_callback,
         )
@@ -354,6 +412,8 @@ class DedupAnalysis:
             "std_dist": self.std_dist,
             "below_thresh": self.below_thresh,
             "threshold": self.threshold,
+            "metric": self.metric,
+            "energy_window": self.energy_window,
             "sim": self.sim,
             "percentiles": self.percentiles,
             "distances": self.distances,
@@ -370,26 +430,29 @@ def run_dedup_analysis(
     *,
     stage: str = "relaxed",
     threshold: float = 1e-2,
+    metric: str = "euclidean",
     soap_r_cut: float = DEFAULT_SOAP_R_CUT,
     soap_n_max: int = DEFAULT_SOAP_N_MAX,
     soap_l_max: int = DEFAULT_SOAP_L_MAX,
+    soap_sigma: float = DEFAULT_SOAP_SIGMA,
     use_pymatgen: bool = False,
     ltol: float = 0.2,
     stol: float = 0.3,
     angle_tol: float = 5.0,
     use_forces: bool = False,
     force_cosine_threshold: float = 0.95,
+    energy_window: float | None = None,
     survival_targets: Optional[list[int]] = None,
     progress_callback: ProgressCallback | None = None,
 ) -> "DedupAnalysis":
-    """Run the full dedup pipeline for one run.
-    Raises :class:`DedupAnalysisError` when the run cannot be processed.
-    """
     from rapmat.storage import SOAPDescriptor
     from rapmat.storage.status import StructureStatus
 
     if survival_targets is None:
         survival_targets = DEFAULT_SURVIVAL_TARGETS
+
+    if metric not in METRICS:
+        raise DedupAnalysisError(f"Unknown distance metric '{metric}'")
 
     def _emit(current: int, total: int, message: str, is_log: bool = False) -> None:
         if progress_callback:
@@ -408,6 +471,7 @@ def run_dedup_analysis(
         r_cut=soap_r_cut,
         n_max=int(soap_n_max),
         l_max=int(soap_l_max),
+        sigma=soap_sigma,
     )
 
     statuses = (
@@ -429,8 +493,16 @@ def run_dedup_analysis(
         s.descriptor = descriptor.compute(s.atoms)
 
     _emit(2, 5, "Computing pairwise distances")
-    prep = prepare_distances(structures)
+    prep = prepare_distances(structures, metric=metric)
     distances = prep.condensed
+
+    merge_ok = (
+        energy_merge_mask(
+            [s.energy_per_atom for s in prep.with_vec], energy_window
+        )
+        if energy_window
+        else None
+    )
 
     _emit(3, 5, "Simulating deduplication", is_log=True)
     sim = simulate_deduplication(
@@ -442,13 +514,16 @@ def run_dedup_analysis(
         angle_tol=angle_tol,
         use_forces=use_forces,
         force_cosine_threshold=force_cosine_threshold,
+        energy_window=energy_window,
+        metric=metric,
         dist_sq=prep.dist_sq,
         progress_callback=progress_callback,
     )
 
     _emit(4, 5, "Computing survival thresholds")
     surv = survival_thresholds(
-        prep.dist_sq, prep.condensed, [p / 100.0 for p in survival_targets]
+        prep.dist_sq, prep.condensed, [p / 100.0 for p in survival_targets],
+        merge_ok=merge_ok,
     )
     percentiles = [(p, t, k) for p, (t, k) in zip(survival_targets, surv)]
 
@@ -459,6 +534,7 @@ def run_dedup_analysis(
         run_name=run_name,
         stage=stage,
         threshold=threshold,
+        metric=metric,
         structures=structures,
         prep=prep,
         sim=sim,
@@ -478,6 +554,7 @@ def run_dedup_analysis(
         stol=stol,
         angle_tol=angle_tol,
         force_cosine_threshold=force_cosine_threshold,
+        energy_window=energy_window,
     )
 
 
@@ -487,6 +564,7 @@ def plot_distance_histogram(
     threshold: Optional[float] = None,
     save_path: Path | str | None = None,
     title: str = "Pairwise Descriptor Distance Distribution",
+    axis_label: str = "L2 Distance",
     bins: int = 200,
 ) -> None:
     import matplotlib
@@ -503,7 +581,7 @@ def plot_distance_histogram(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
 
     ax1.hist(distances, bins=bins, edgecolor="none", alpha=0.75)
-    ax1.set_xlabel("L2 Distance")
+    ax1.set_xlabel(axis_label)
     ax1.set_ylabel("Pair Count")
     ax1.set_title(title)
 
@@ -523,7 +601,7 @@ def plot_distance_histogram(
         edgecolor="none",
         alpha=0.75,
     )
-    ax2.set_xlabel("L2 Distance to Closest Neighbor")
+    ax2.set_xlabel(f"{axis_label} to Closest Neighbor")
     ax2.set_ylabel("Structure Count")
     ax2.set_title("Closest Neighbor Distance Distribution")
 

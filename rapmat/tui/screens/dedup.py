@@ -113,6 +113,11 @@ class DedupScreen(ScreenBase):
     #  Layout
     # ------------------------------------------------------------------ #
 
+    def _metric_key(self, choice: str) -> str:
+        from rapmat.core.dedup_analysis import DEFAULT_METRIC
+
+        return self._metric_by_choice.get(choice, DEFAULT_METRIC)
+
     def _run_options(self) -> list[str]:
         names = [r.name for r in self._state.runs_cache]
         if self._state.active_run and self._state.active_run not in names:
@@ -121,6 +126,7 @@ class DedupScreen(ScreenBase):
 
     def _build_frame(self) -> urwid.Frame:
         from rapmat.core.dedup_analysis import (DEFAULT_ENERGY_WINDOW,
+                                                DEFAULT_METRIC,
                                                 DEFAULT_SOAP_L_MAX,
                                                 DEFAULT_SOAP_N_MAX,
                                                 DEFAULT_SOAP_R_CUT,
@@ -129,6 +135,8 @@ class DedupScreen(ScreenBase):
 
         self._metrics = METRICS
         self._metric_by_choice = METRIC_BY_CHOICE
+        metric_choices = list(METRIC_BY_CHOICE)
+        default_spec = METRICS[DEFAULT_METRIC]
 
         run_opts = self._run_options()
         default_idx = 0
@@ -140,10 +148,10 @@ class DedupScreen(ScreenBase):
                 dropdown_field("run_name", "Run", run_opts, default=default_idx),
                 dropdown_field("stage", "Stage", ["relaxed", ], default=0),
                 float_field("dedup_threshold", "Threshold",
-                            default=METRICS["euclidean"].default_threshold),
+                            default=default_spec.default_threshold),
                 dropdown_field(
-                    "metric", "Metric",
-                    list(METRIC_BY_CHOICE), default=0,
+                    "metric", "Metric", metric_choices,
+                    default=metric_choices.index(default_spec.choice),
                 ),
                 checkbox_field("pymatgen_dedup", "Pymatgen dedup", default=False),
                 float_field("pymatgen_ltol", "Pymatgen ltol", default=0.2),
@@ -174,9 +182,7 @@ class DedupScreen(ScreenBase):
             ],
         )
 
-        self._metric_hint = urwid.Text(
-            ("details", f"  {METRICS['euclidean'].hint}")
-        )
+        self._metric_hint = urwid.Text(("details", f"  {default_spec.hint}"))
         metric_widget = self._form.get_widget("metric")
         if metric_widget is not None:
             urwid.connect_signal(metric_widget, "change", self._on_metric_change)
@@ -228,7 +234,7 @@ class DedupScreen(ScreenBase):
         return urwid.Frame(body=body)
 
     def _on_metric_change(self, _widget, option: str) -> None:
-        spec = self._metrics[self._metric_by_choice.get(option, "euclidean")]
+        spec = self._metrics[self._metric_key(option)]
         self._form.set_values({"dedup_threshold": spec.default_threshold})
         self._metric_hint.set_text(("details", f"  {spec.hint}"))
 
@@ -254,7 +260,7 @@ class DedupScreen(ScreenBase):
             return
 
         vals = self._form.get_values()
-        vals["metric"] = self._metric_by_choice.get(vals["metric"], "euclidean")
+        vals["metric"] = self._metric_key(vals["metric"])
         errors = self._validate(vals)
         if errors:
             self._error_text.set_text(("form_error", " " + "; ".join(errors)))

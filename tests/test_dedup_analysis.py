@@ -40,19 +40,25 @@ def _make_entry(struct_id, atoms, energy, vector, forces=None):
 class TestPairwiseDistances:
     def test_identical_vectors(self):
         vecs = np.array([[1.0, 0.0], [1.0, 0.0]])
-        d = compute_pairwise_distances(vecs)
+        d = compute_pairwise_distances(vecs, metric="euclidean")
         assert len(d) == 1
         assert d[0] == pytest.approx(0.0)
 
     def test_known_distance(self):
         vecs = np.array([[0.0, 0.0], [3.0, 4.0]])
-        d = compute_pairwise_distances(vecs)
+        d = compute_pairwise_distances(vecs, metric="euclidean")
         assert d[0] == pytest.approx(5.0)
 
     def test_three_vectors(self):
         vecs = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
-        d = compute_pairwise_distances(vecs)
+        d = compute_pairwise_distances(vecs, metric="euclidean")
         assert len(d) == 3
+
+    def test_default_metric_is_cosine(self):
+        vecs = np.array([[1.0, 0.0], [2.0, 0.0]])   # same direction, 2x length
+        assert compute_pairwise_distances(vecs)[0] == pytest.approx(0.0)
+        assert compute_pairwise_distances(
+            vecs, metric="euclidean")[0] == pytest.approx(1.0)
 
 
 # ------------------------------------------------------------------ #
@@ -98,7 +104,9 @@ class TestSimulateDedup:
             _make_entry("s/1", cu_fcc, -3.0, vec_fcc),
             _make_entry("s/2", cu_bcc, -2.5, vec_bcc),
         ]
-        result = simulate_deduplication(entries, threshold=1e-5)
+        result = simulate_deduplication(
+            entries, threshold=1e-5, metric="euclidean"
+        )
         assert result.kept == 2
         assert result.final_dropped == 0
 
@@ -605,22 +613,26 @@ class TestDedupScreenValidation:
         vals["metric"] = "euclidean"
         assert screen._validate(vals) == []
 
-    def test_metric_switch_resets_threshold_to_its_default(self):
-        from rapmat.core.dedup_analysis import METRICS
+    def test_form_opens_on_the_default_metric(self):
+        from rapmat.core.dedup_analysis import DEFAULT_METRIC, METRICS
 
+        screen, _ = self._screen()
+        vals = screen._form.get_values()
+        assert vals["metric"] == METRICS[DEFAULT_METRIC].choice
+        assert (vals["dedup_threshold"]
+                == pytest.approx(METRICS[DEFAULT_METRIC].default_threshold))
+
+    def test_metric_switch_resets_threshold_to_its_default(self):
+        from rapmat.core.dedup_analysis import DEFAULT_METRIC, METRICS
+
+        other = next(k for k in METRICS if k != DEFAULT_METRIC)
         screen, _ = self._screen()
         dd = screen._form.get_widget("metric")
 
-        assert (screen._form.get_values()["dedup_threshold"]
-                == pytest.approx(METRICS["euclidean"].default_threshold))
-
-        dd._pick(None, dd.options.index(METRICS["cosine"].choice))
-        assert (screen._form.get_values()["dedup_threshold"]
-                == pytest.approx(METRICS["cosine"].default_threshold))
-
-        dd._pick(None, dd.options.index(METRICS["euclidean"].choice))
-        assert (screen._form.get_values()["dedup_threshold"]
-                == pytest.approx(METRICS["euclidean"].default_threshold))
+        for key in (other, DEFAULT_METRIC):
+            dd._pick(None, dd.options.index(METRICS[key].choice))
+            assert (screen._form.get_values()["dedup_threshold"]
+                    == pytest.approx(METRICS[key].default_threshold)), key
 
     def test_each_metric_default_passes_validation(self):
         from rapmat.core.dedup_analysis import METRICS

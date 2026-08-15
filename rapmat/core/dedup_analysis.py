@@ -85,15 +85,17 @@ METRICS: dict[str, MetricSpec] = {
         default_threshold=1e-2,
     ),
     "cosine": MetricSpec(
-        choice="L2+norm",
-        short="L2+norm",
+        choice="1-cos",
+        short="1-cos",
         axis="Cosine Distance (1-cos)",
-        hint="Using scale-independent L2 (1 - cos) on the normalized set",
+        hint="Using scale-independent 1 - cos",
         default_threshold=1e-7,
     ),
 }
 
 METRIC_BY_CHOICE = {spec.choice: key for key, spec in METRICS.items()}
+
+DEFAULT_METRIC = "cosine"
 
 
 class DedupAnalysisError(Exception):
@@ -101,7 +103,7 @@ class DedupAnalysisError(Exception):
 
 
 def compute_pairwise_distances(
-    vectors: np.ndarray, metric: str = "euclidean"
+    vectors: np.ndarray, metric: str = DEFAULT_METRIC
 ) -> np.ndarray:
     return pdist(vectors, metric=metric)
 
@@ -125,7 +127,7 @@ def _sorted_with_vectors(structures: list) -> list:
 
 
 def prepare_distances(
-    structures: list, metric: str = "euclidean"
+    structures: list, metric: str = DEFAULT_METRIC
 ) -> PreparedDistances:
     with_vec = _sorted_with_vectors(structures)
     if not with_vec:
@@ -140,7 +142,7 @@ def prepare_distances(
 def simulate_deduplication(
     structures: list,
     *,
-    threshold: float = 1e-2,
+    threshold: float = METRICS[DEFAULT_METRIC].default_threshold,
     use_pymatgen: bool = False,
     ltol: float = 0.2,
     stol: float = 0.3,
@@ -148,7 +150,7 @@ def simulate_deduplication(
     use_forces: bool = False,
     force_cosine_threshold: float = 0.95,
     energy_window: float | None = None,
-    metric: str = "euclidean",
+    metric: str = DEFAULT_METRIC,
     dist_sq: np.ndarray | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> DedupSimulationResult:
@@ -429,8 +431,8 @@ def run_dedup_analysis(
     run_name: str,
     *,
     stage: str = "relaxed",
-    threshold: float = 1e-2,
-    metric: str = "euclidean",
+    threshold: float = METRICS[DEFAULT_METRIC].default_threshold,
+    metric: str = DEFAULT_METRIC,
     soap_r_cut: float = DEFAULT_SOAP_R_CUT,
     soap_n_max: int = DEFAULT_SOAP_N_MAX,
     soap_l_max: int = DEFAULT_SOAP_L_MAX,

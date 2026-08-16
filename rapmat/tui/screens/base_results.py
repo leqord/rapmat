@@ -783,6 +783,39 @@ class BaseResultsScreen(ScreenBase):
 
         self.show_dialog(_factory)
 
+    def _action_view_3d(self) -> None:
+        if self._table is None:
+            return
+        result = self._table.get_focused_row()
+        if result is None:
+            self._show_message("No structure selected.")
+            return
+        if result.atoms is None:
+            self._show_message("No structure data available to view.")
+            return
+
+        viewable = [r for r in self._get_display_results() if r.atoms is not None]
+        try:
+            index = next(i for i, r in enumerate(viewable) if r is result)
+        except StopIteration:
+            viewable, index = [result], 0
+
+        from rapmat.tui.screens.structure_view import StructureViewScreen
+
+        self._router.push(
+            StructureViewScreen(
+                self._state,
+                self._router,
+                viewable,
+                index,
+                on_focus=self._focus_result_row,
+            )
+        )
+
+    def _focus_result_row(self, result: "ResultRow") -> None:
+        if self._table is not None:
+            self._table.focus_row(result)
+
     def _action_save(self) -> None:
         if self._table is None:
             return
@@ -955,7 +988,7 @@ class BaseResultsScreen(ScreenBase):
             return False
 
     def _save_dispersion_plot(self, result: "ResultRow", out_path: Path) -> None:
-        """Regenerate a phonon dispersion plot from previously phonopy data.
+        """Regenerate a phonon dispersion plot from previous phonopy data.
         """
         structure_id = result.structure_id
         if not structure_id:
@@ -996,12 +1029,18 @@ class BaseResultsScreen(ScreenBase):
 
     def _on_row_select(self, _table, result: "ResultRow") -> None:
         self._update_details(result)
+        self._action_view_3d()
 
     def bindings(self) -> list[KeyBinding]:
         return [
             KeyBinding(
                 ("/",), "Search", self._action_enter_search,
                 help="Filter rows by a search string", priority=10,
+            ),
+            KeyBinding(
+                ("enter",), "3D", self._action_view_3d,
+                help="Open the 3D structure viewer",
+                priority=18,
             ),
             KeyBinding(
                 ("s",), "Save", self._action_save,

@@ -375,3 +375,76 @@ class TestQuitGuard:
 
         with pytest.raises(urwid.ExitMainLoop):
             home.keypress((), "q")
+
+
+class TestHelpOverlayEnter:
+
+    def _help_rows(self, screen, app):
+        rows = [
+            (b.key_display(), b.help_text())
+            for b in screen.bindings() if b.is_enabled()
+        ]
+        bound = {k for k, _d in rows}
+        if "Enter" not in bound:
+            rows.append(("Enter", "Select"))
+        return rows
+
+    def test_results_help_describes_enter_once(self):
+        from rapmat.tui.screens.results import ResultsScreen
+
+        app, state = _make_app()
+        rows = self._help_rows(ResultsScreen(state, app._router), app)
+        enter = [d for k, d in rows if k == "Enter"]
+        assert len(enter) == 1
+        assert "3D" in enter[0] or "viewer" in enter[0]
+
+    def test_other_screens_keep_the_generic_enter_row(self):
+        app, _state = _make_app()
+        rows = self._help_rows(app._router.current, app)
+        assert ("Enter", "Select") in rows
+
+    def test_app_help_overlay_renders_without_duplicate_enter(self):
+        app, _state = _make_app()
+        app._show_help()
+        body = app._frame.body
+        canvas = body.render((100, 30), focus=True)
+        text = b"\n".join(canvas.text).decode()
+        assert text.count("Enter") == 1
+
+
+class TestBindingKeysAreUnique:
+
+    def _screens(self):
+        from rapmat.tui.screens.hull import PhaseAnalysisScreen
+        from rapmat.tui.screens.results import ResultsScreen
+        from rapmat.tui.screens.structure_view import StructureViewScreen
+
+        app, state = _make_app()
+        return [
+            ResultsScreen(state, app._router),
+            PhaseAnalysisScreen(state, app._router),
+            StructureViewScreen(state, app._router, [], 0),
+        ]
+
+    def test_no_screen_binds_a_key_twice(self):
+        for screen in self._screens():
+            seen: dict[str, str] = {}
+            for binding in screen.bindings():
+                for key in binding.keys:
+                    key = key.lower()
+                    assert key not in seen, (
+                        f"{type(screen).__name__} binds {key!r} to both "
+                        f"{seen[key]!r} and {binding.label_text()!r}"
+                    )
+                    seen[key] = binding.label_text()
+
+    def test_results_screens_expose_the_3d_view(self):
+        for screen in self._screens()[:2]:
+            keys = {k for b in screen.bindings() for k in b.keys}
+            assert "enter" in keys, type(screen).__name__
+
+    def test_results_screens_do_not_shadow_global_keys(self):
+        for screen in self._screens()[:2]:
+            keys = {k.lower() for b in screen.bindings() for k in b.keys}
+            assert "?" not in keys
+            assert "esc" not in keys

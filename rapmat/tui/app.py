@@ -9,7 +9,7 @@ if sys.platform == "win32":
 
 from rapmat.tui.router import ScreenRouter
 from rapmat.tui.state import AppState
-from rapmat.tui.theme import PALETTE
+from rapmat.tui.theme import PALETTE, apply_color_depth
 from rapmat.tui.widgets.status_bar import StatusBar
 from rapmat.utils import hardware
 
@@ -58,6 +58,8 @@ class RapmatApp:
             unhandled_input=self._global_input,
             pop_ups=True,
         )
+        
+        state.color_depth = apply_color_depth(self._loop.screen)
 
         state.loop = self._loop
         state.request_quit = self._request_quit
@@ -202,7 +204,8 @@ class RapmatApp:
         if current is not None and hasattr(current, "esc_label"):
             esc_label = current.esc_label()
         bound = {key for key, _desc in rows}
-        rows.append(("Enter", "Select"))
+        if "Enter" not in bound:
+            rows.append(("Enter", "Select"))
         if esc_label:
             rows.append(("Esc", esc_label))
         if "q" not in bound:

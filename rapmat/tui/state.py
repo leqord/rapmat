@@ -3,6 +3,7 @@ from typing import Any
 
 from rapmat.core.entities import RunMetadata, Study
 from rapmat.storage.base import StructureStore
+from rapmat.tui.theme import TRUECOLOR
 
 
 @dataclass
@@ -11,6 +12,8 @@ class AppState:
     loop: Any = None
     status_bar: Any = None
     request_quit: Any = None
+
+    color_depth: int = TRUECOLOR
 
     active_run: str | None = None
     active_study: str | None = None

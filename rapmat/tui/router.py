@@ -61,6 +61,9 @@ class ScreenRouter:
         self._update_breadcrumb()
         return removed_screen
 
+    def refresh_breadcrumb(self) -> None:
+        self._update_breadcrumb()
+
     def replace(self, screen: Screen) -> None:
         if self._stack:
             self._stack[-1][0].on_leave()

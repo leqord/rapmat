@@ -137,6 +137,10 @@ def _make_screen(name: str, state, router):
         from rapmat.tui.screens.hull import PhaseAnalysisScreen
 
         return PhaseAnalysisScreen(state, router)
+    if name == "structure_view":
+        from rapmat.tui.screens.structure_view import StructureViewScreen
+
+        return StructureViewScreen(state, router, _make_eval_rows(), 0)
     raise ValueError(name)
 
 
@@ -155,6 +159,7 @@ _ALL_SCREENS = [
     "eval_results",
     "results",
     "hull",
+    "structure_view",
 ]
 
 
@@ -362,3 +367,103 @@ class TestResultsDialogs:
 
         screen, widget = results_env
         self._open_and_close(screen, widget, "s", _SaveDialog)
+
+
+class TestResultsStructureView:
+
+    _SIZE = (121, 38)
+
+    @pytest.fixture
+    def results_env(self, app_env):
+        from ase.build import bulk
+
+        from conftest import add_relaxed_structure
+
+        state, app = app_env
+        for idx, a in enumerate((4.05, 4.10, 4.15)):
+            add_relaxed_structure(
+                state.store, "smoke-run", bulk("Al", "fcc", a=a, cubic=True),
+                -3.0 - idx * 0.1, f"smoke-run/{idx + 1}",
+            )
+        state.loop = None
+        screen = _make_screen("results", state, app._router)
+        app._router.push(screen)
+        widget = app._router._stack[-1][1]
+        widget.render(self._SIZE, focus=True)
+        return state, app, screen, widget
+
+    def _open(self, app, screen):
+        from rapmat.tui.screens.structure_view import StructureViewScreen
+
+        screen.keypress((), "enter")
+        view = app._router.current
+        assert isinstance(view, StructureViewScreen)
+        app._router._stack[-1][1].render(self._SIZE, focus=True)
+        return view
+
+    def test_enter_opens_the_viewer(self, results_env):
+        _state, app, screen, _widget = results_env
+        view = self._open(app, screen)
+        assert view._result is screen._table.get_focused_row()
+
+    def test_enter_on_a_focused_row_opens_the_viewer(self, results_env):
+        from rapmat.tui.screens.structure_view import StructureViewScreen
+
+        _state, app, screen, widget = results_env
+        row = screen._table._walker[screen._table._listbox.focus_position]
+        row.keypress((80,), "enter")
+        assert isinstance(app._router.current, StructureViewScreen)
+        app._router._stack[-1][1].render(self._SIZE, focus=True)
+
+    def test_three_is_no_longer_bound(self, results_env):
+        _state, app, screen, _widget = results_env
+        depth = app._router.depth
+        screen.keypress((), "3")
+        assert app._router.depth == depth
+
+    def test_viewer_receives_the_whole_displayed_list(self, results_env):
+        _state, app, screen, _widget = results_env
+        view = self._open(app, screen)
+        assert view._results == screen._get_display_results()
+
+    def test_stepping_moves_the_table_focus(self, results_env):
+        _state, app, screen, _widget = results_env
+        view = self._open(app, screen)
+        view.keypress((), "d")
+        assert screen._table.get_focused_row() is view._result
+
+    def test_esc_returns_to_the_last_structure_viewed(self, results_env):
+        _state, app, screen, widget = results_env
+        started_on = screen._table.get_focused_row()
+
+        view = self._open(app, screen)
+        view.keypress((), "d")
+        view.keypress((), "d")
+        last_seen = view._result
+
+        app._router.pop()
+        widget.render(self._SIZE, focus=True)
+
+        assert app._router.current is screen
+        assert screen._table.get_focused_row() is last_seen
+        assert last_seen is not started_on
+
+    def test_rows_without_atoms_are_skipped(self, results_env):
+        _state, app, screen, _widget = results_env
+        display = screen._get_display_results()
+        display[1].structure.final_atoms = None
+        display[1].structure.initial_atoms = None
+
+        view = self._open(app, screen)
+        assert display[1] not in view._results
+        assert len(view._results) == 2
+
+    def test_focused_row_without_atoms_reports_instead_of_opening(self, results_env):
+        _state, app, screen, _widget = results_env
+        focused = screen._table.get_focused_row()
+        focused.structure.final_atoms = None
+        focused.structure.initial_atoms = None
+
+        depth = app._router.depth
+        screen.keypress((), "enter")
+        assert app._router.depth == depth

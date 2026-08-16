@@ -77,6 +77,41 @@ class TestSortableTable:
         )
         assert len(received) >= 1
 
+    def test_focus_row_by_identity(self):
+        table = self._make_table()
+        target = table._data[2]
+        assert table.focus_row(target) is True
+        assert table.get_focused_row() is target
+
+    def test_focus_row_by_equality(self):
+        table = self._make_table()
+        assert table.focus_row({"name": "run-a", "val": 1}) is True
+        assert table.get_focused_row()["name"] == "run-a"
+
+    def test_focus_row_missing_returns_false(self):
+        table = self._make_table()
+        assert table.focus_row({"name": "nope", "val": 0}) is False
+        assert table.get_focused_row()["name"] == "run-b"
+
+    def test_focus_row_on_empty_table(self):
+        table = self._make_table(data=[])
+        assert table.focus_row({"name": "a", "val": 1}) is False
+
+    def test_focus_row_notifies_the_focus_callback(self):
+        from rapmat.tui.widgets.table import SortableTable
+
+        received = []
+        data = [{"name": "a", "val": 1}, {"name": "b", "val": 2}]
+        table = SortableTable(
+            columns=[("Name", 10), ("Val", 6)],
+            row_data=data,
+            format_row=lambda r: [r["name"], str(r["val"])],
+            on_focus_change=lambda row: received.append(row),
+        )
+        received.clear()
+        assert table.focus_row(data[1]) is True
+        assert received == [data[1]]
+
 
 class TestFormGroup:
     def _make_form(self):

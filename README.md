@@ -88,6 +88,15 @@ source ~/.bashrc
 
 ### Proceed to the linux install guide
 
+# VASP
+
+You need to set the path to VASP pseudopotentials:
+```bash
+# ~/vasp/pp/potpaw
+export VASP_PP_PATH=~/vasp/pp >> ~/.bashrc
+source ~/.bashrc
+```
+
 # Usage
 
 ## Basic concepts

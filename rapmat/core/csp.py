@@ -26,7 +26,7 @@ def run_processing_loop(
     from ase.units import GPa as _GPa
 
     from rapmat.calculators import Calculators, ProgressCalcCallback
-    from rapmat.calculators.factory import load_calculator
+    from rapmat.calculators.factory import CalculatorProvider
     from rapmat.core.config import SearchConfig
     from rapmat.core.relaxation import structure_relax
     from rapmat.core.sanity import check_sanity
@@ -62,14 +62,6 @@ def run_processing_loop(
 
     free_cuda_memory()
 
-    _calc_cb.on_status(f"Loading calculator {calculator_name}...")
-    calculator = load_calculator(
-        Calculators(calculator_name),
-        calculator_workdir_path,
-        config=calculator_config,
-        callback=_calc_cb,
-    )
-
     counter: int = 0
     discarded_sanity = 0
     n_candidates = len(candidates)
@@ -78,9 +70,23 @@ def run_processing_loop(
         if progress_callback:
             progress_callback(counter, n_candidates, msg)
 
+    _calc_cb.on_status(f"Loading calculator {calculator_name}...")
+    calculator_for = CalculatorProvider(
+        Calculators(calculator_name),
+        calculator_workdir_path,
+        config=calculator_config,
+        callback=_calc_cb,
+        auto_settings=cfg.calculator_settings == "auto",
+        monolayer=domain_val == "monolayer",
+        log_callback=_report,
+    )
+
+    # NOTE: Build one upfront so a broken calculator fails the run prematurely
+    if candidates:
+        calculator_for(candidates[0].atoms)
+
     def _run_loop():
         nonlocal counter, discarded_sanity, n_relaxed
-        nonlocal calculator
 
         for candidate in candidates:
             counter += 1
@@ -92,9 +98,9 @@ def run_processing_loop(
                 structure = candidate.atoms.copy()
                 from rapmat.calculators import cleanup_calculator_files
 
-                cleanup_calculator_files(calculator)
-
                 try:
+                    calculator = calculator_for(structure)
+                    cleanup_calculator_files(calculator)
                     structure.calc = calculator
                     structure.info["initial_spg"] = format_spg(
                         structure, symprec=symprec
@@ -208,13 +214,9 @@ def run_processing_loop(
                     _report(
                         f"Reloading calculator {calculator_name} after error (attempt {attempt + 1})..."
                     )
+                    calculator_for.reset()
                     try:
-                        calculator = load_calculator(
-                            Calculators(calculator_name),
-                            calculator_workdir_path,
-                            config=calculator_config,
-                            callback=_calc_cb,
-                        )
+                        calculator_for(structure)
                         _report(f"Calculator {calculator_name} reloaded successfully.")
                     except Exception as reload_ex:
                         logger.error(

@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 
 from rapmat.calculators import Calculators, ProgressCalcCallback
-from rapmat.calculators.factory import load_calculator
+from rapmat.calculators.factory import CalculatorProvider
 from rapmat.core.entities import ResultRow
 from rapmat.core.phonon import calculate_phonons_with_freq, serialize_phonons
 from rapmat.storage.base import StructureStore
@@ -26,6 +26,8 @@ def compute_dynamical_stability_for_results(
     symprec: float = 1e-3,
     reduce_primitive: bool = True,
     run_name: str | None = None,
+    auto_settings: bool = False,
+    monolayer: bool = False,
 ) -> bool:
     if phonon_top < 1:
         return False
@@ -52,11 +54,14 @@ def compute_dynamical_stability_for_results(
             if progress_callback is not None:
                 progress_callback(_bar["current"], total, message)
 
-        calculator = load_calculator(
+        calculator_for = CalculatorProvider(
             phonon_calculator,
             wdir,
             config=calculator_config,
             callback=ProgressCalcCallback(_sub_progress),
+            auto_settings=auto_settings,
+            monolayer=monolayer,
+            log_callback=lambda msg: _sub_progress(0, 0, msg),
         )
 
         calc_name = phonon_calculator.value
@@ -107,7 +112,7 @@ def compute_dynamical_stability_for_results(
             try:
                 phonons, min_freq = calculate_phonons_with_freq(
                     atoms,
-                    calculator=calculator,
+                    calculator_for=calculator_for,
                     displacement=phonon_displacement,
                     supercell=phonon_supercell,
                     qpoint_mesh=phonon_mesh,

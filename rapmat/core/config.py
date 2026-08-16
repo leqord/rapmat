@@ -48,6 +48,7 @@ class SearchConfig(BaseModel):
 
     # Method defaults
     calculator_config: dict = Field(default_factory=dict)
+    calculator_settings: str = "toml" # NOTE: auto to derive per-structure
     symprec: float = 1e-2
     pressure_gpa: float = 0.0
     min_dist: float = 0.5

@@ -839,6 +839,87 @@ class BaseResultsScreen(ScreenBase):
 
         self.show_dialog(_factory)
 
+    def _action_export_settings(self) -> None:
+        if self._table is None:
+            return
+        result = self._table.get_focused_row()
+        if result is None:
+            self._show_message("No structure selected.")
+            return
+        if result.atoms is None:
+            self._show_message("No structure data available.")
+            return
+
+        from rapmat.tui.widgets.form import (FormGroup, checkbox_field,
+                                             text_field)
+
+        ident = self._save_ident(result).replace("/", "_")
+        run_name = getattr(self, "_run_name", None)
+        meta = self._state.store.get_run_metadata(run_name) if run_name else None
+
+        form = FormGroup(
+            [
+                text_field(
+                    "path", "File",
+                    default=str(Path.cwd() / f"vasp_{ident}.toml"),
+                ),
+                checkbox_field(
+                    "monolayer", "Monolayer",
+                    default=bool(meta and meta.domain == "monolayer"),
+                ),
+            ],
+            label_width=12,
+        )
+
+        def _factory(parent, close):
+            def _on_submit() -> None:
+                vals = dlg.validated_values()
+                if vals is None:
+                    return
+                close()
+                self._write_settings_toml(
+                    result, vals["path"], vals["monolayer"]
+                )
+
+            dlg = FormDialog(
+                "Export VASP settings",
+                form,
+                parent,
+                [("Export", _on_submit), ("Cancel", close)],
+                on_cancel=close,
+                width=70,
+                min_width=50,
+            )
+            return dlg
+
+        self.show_dialog(_factory)
+
+    def _write_settings_toml(
+        self, result: "ResultRow", path: str, monolayer: bool
+    ) -> None:
+        from rapmat.calculators.vasp_auto import (export_toml,
+                                                  omat24_vasp_params,
+                                                  resolve_potcar_version)
+
+        try:
+            # NOTE:  what would actually be used
+            potcar_version, _note = resolve_potcar_version()
+            params = omat24_vasp_params(
+                result.atoms,
+                monolayer=monolayer,
+                potcar_version=potcar_version,
+            )
+            out_path = Path(path).expanduser()
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(
+                export_toml(params, f"{result.formula} [{result.short_id}]"),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            self._show_message(f"Export failed: {exc}")
+            return
+        self._show_message(f"Wrote {out_path}")
+
     def _do_save(
         self,
         result: "ResultRow",
@@ -963,6 +1044,11 @@ class BaseResultsScreen(ScreenBase):
                 ("u",), "Uncv", self._action_toggle_unconverged,
                 help="Toggle unconverged", priority=70,
             ),
+            KeyBinding(
+                ("i",), "INCAR", self._action_export_settings,
+                help="Export auto-generated DFT (VASP) settings",
+                priority=75,
+            ),
         ]
 
     def _on_esc(self) -> bool:
@@ -984,10 +1070,13 @@ class BaseResultsScreen(ScreenBase):
             return
 
         from rapmat.tui.widgets.calc_fields import (
+            CALCULATOR_FIELD_KEYS,
             calculator_fields,
             parse_toml_config,
             phonon_fields,
+            remember_vasp_command,
             setup_calculator_signals,
+            validate_calculator,
         )
         from rapmat.tui.widgets.form import (FormGroup, dropdown_field,
                                              int_field)
@@ -1007,7 +1096,7 @@ class BaseResultsScreen(ScreenBase):
             label_width=18,
             groups=[
                 ("Scope", ["top_n", "apply_to"]),
-                ("Calculator", ["calculator", "calculator_config"]),
+                ("Calculator", CALCULATOR_FIELD_KEYS),
                 ("Phonon Settings", [
                     "phonon_supercell", "phonon_mesh",
                     "phonon_displacement", "phonon_cutoff",
@@ -1024,11 +1113,12 @@ class BaseResultsScreen(ScreenBase):
                 if vals is None:
                     return
 
-                calc_config_dict, toml_err = parse_toml_config(vals)
-                if toml_err:
-                    dlg.set_error(toml_err)
+                calc_err = validate_calculator(vals) or parse_toml_config(vals)[1]
+                if calc_err:
+                    dlg.set_error(calc_err)
                     return
-                vals["calculator_config_dict"] = calc_config_dict
+                vals["calculator_config_dict"] = parse_toml_config(vals)[0]
+                remember_vasp_command(vals)
 
                 close()
                 self._start_phonon_task(vals)
@@ -1085,7 +1175,15 @@ class BaseResultsScreen(ScreenBase):
         cutoff = float(vals.get("phonon_cutoff", -0.15))
         reduce_prim = bool(vals.get("reduce_prim", True))
         phonon_symprec = float(vals.get("phonon_symprec", DEFAULT_SYMPREC))
-        calc_config = vals.get("calculator_config_dict", {})
+
+        from rapmat.tui.widgets.calc_fields import (calculator_run_config,
+                                                    is_auto_settings)
+
+        calc_config = calculator_run_config(vals)
+        auto_settings = is_auto_settings(vals)
+        run_name = getattr(self, "_run_name", None)
+        meta = self._state.store.get_run_metadata(run_name) if run_name else None
+        monolayer = bool(meta and meta.domain == "monolayer")
 
         try:
             calc_enum = Calculators(calc_name)
@@ -1125,7 +1223,9 @@ class BaseResultsScreen(ScreenBase):
                 progress_callback=progress.as_callback(),
                 symprec=phonon_symprec,
                 reduce_primitive=reduce_prim,
-                run_name=getattr(self, "_run_name", None),
+                run_name=run_name,
+                auto_settings=auto_settings,
+                monolayer=monolayer,
             )
 
         def _on_progress(current: int, total: int, message: str) -> None:

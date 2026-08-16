@@ -123,6 +123,18 @@ class SortableTable(urwid.WidgetWrap):
             return widget.data
         return None
 
+    def focus_row(self, row, *, coming_from: str | None = None) -> bool:
+        for index, candidate in enumerate(self._data):
+            if candidate is row or candidate == row:
+                try:
+                    self._listbox.set_focus(index, coming_from=coming_from)
+                except (IndexError, ValueError):
+                    return False
+
+                self._on_focus_change()
+                return True
+        return False
+
     def sort_by(self, col_index: int, reverse: bool = False) -> None:
         def _key(row: dict) -> str:
             texts = self._format_row(row)

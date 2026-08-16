@@ -48,6 +48,11 @@ _KEY_DISPLAY = {
     "esc": "Esc",
     "enter": "Enter",
     "tab": "Tab",
+    "left": "Left",
+    "right": "Right",
+    "up": "Up",
+    "down": "Down",
+    " ": "Space",
 }
 
 

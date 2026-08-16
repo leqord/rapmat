@@ -1,5 +1,9 @@
-"""Shared urwid palette.
+"""Shared urwid palette and terminal color depth negotiation.
 """
+
+import os
+import sys
+from collections.abc import Mapping
 
 # ------------------------------------------------------------------ #
 #  Global palette
@@ -54,3 +58,77 @@ for _name, _fg, _bg, *_rest in PALETTE:
     DIALOG_REMAP[_name] = _twin
 
 PALETTE.extend(_dialog_variants)
+
+
+# ------------------------------------------------------------------ #
+#  Color depth
+# ------------------------------------------------------------------ #
+
+TRUECOLOR = 2 ** 24
+
+_TRUECOLOR_TERM_PROGRAMS = {
+    "vscode", "iTerm.app", "WezTerm", "ghostty", "Hyper", "rio",
+}
+
+_COLOR_NAMES = {
+    "truecolor": TRUECOLOR,
+    "24bit": TRUECOLOR,
+    "24-bit": TRUECOLOR,
+    "256": 256,
+    "16": 16,
+    "1": 1,
+}
+
+
+def detect_color_depth(env: Mapping[str, str] | None = None) -> int:
+    env = os.environ if env is None else env
+
+    override = env.get("RAPMAT_COLORS", "").strip().lower()
+    if override in _COLOR_NAMES:
+        return _COLOR_NAMES[override]
+
+    colorterm = env.get("COLORTERM", "").lower()
+    if "truecolor" in colorterm or "24bit" in colorterm:
+        return TRUECOLOR
+    if env.get("WT_SESSION") or env.get("KITTY_WINDOW_ID"):
+        return TRUECOLOR
+    if env.get("ALACRITTY_WINDOW_ID"):
+        return TRUECOLOR
+    if env.get("TERM_PROGRAM") in _TRUECOLOR_TERM_PROGRAMS:
+        return TRUECOLOR
+
+    term = env.get("TERM", "")
+    if "direct" in term or "truecolor" in term:
+        return TRUECOLOR
+    if "256color" in term:
+        return 256
+    if not term and sys.platform == "win32":
+        return TRUECOLOR
+    return 16
+
+
+def color_depth_label(depth: int) -> str:
+    if depth >= TRUECOLOR:
+        return "truecolor"
+    if depth > 16:
+        return f"{depth} colours (approximated)"
+    return f"{depth} colours"
+
+
+def apply_color_depth(screen, depth: int | None = None) -> int:
+    if depth is None:
+        depth = detect_color_depth()
+
+    setter = getattr(screen, "set_terminal_properties", None)
+    if setter is None:
+        return 16
+
+    for candidate in (depth, 256, 16):
+        if candidate > depth:
+            continue
+        try:
+            setter(colors=candidate)
+            return candidate
+        except Exception:
+            continue
+    return 16

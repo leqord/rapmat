@@ -30,6 +30,22 @@ from rapmat.storage.base import StructureStore
 from rapmat.storage.status import StructureStatus
 
 
+@pytest.fixture(autouse=True)
+def isolate_user_config(tmp_path, monkeypatch):
+    config_dir = tmp_path / "user_config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr("rapmat.app_config.APP_CONFIG_DIR", config_dir)
+    monkeypatch.setattr(
+        "rapmat.app_config._SETTINGS_FILE", config_dir / "settings.toml"
+    )
+    monkeypatch.setattr("rapmat.db_config.APP_CONFIG_DIR", config_dir)
+    monkeypatch.setattr(
+        "rapmat.db_config._DB_CONFIG_FILE", config_dir / "db.toml"
+    )
+    return config_dir
+
+
 def add_generated_candidate(
     store: StructureStore,
     run_name: str,

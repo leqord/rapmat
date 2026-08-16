@@ -1,9 +1,33 @@
+import json
 from typing import Sequence
 
 from pydantic import BaseModel
 
 from rapmat.core.entities import Structure
 from rapmat.utils.progress import ProgressCallback
+
+
+def evaluation_config_key(
+    *,
+    calculator_config: dict,
+    calculator_settings: str = "toml",
+    run_phonons: bool = False,
+    phonon_supercell=(3, 3, 3),
+    phonon_mesh=(20, 20, 20),
+    phonon_displacement: float = 1e-2,
+) -> str:
+    config: dict = {
+        "run_phonons": run_phonons,
+        "calculator_config": calculator_config,
+    }
+    if calculator_settings != "toml":
+        config["calculator_settings"] = calculator_settings
+    if run_phonons:
+        config["phonon_supercell"] = phonon_supercell
+        config["phonon_mesh"] = phonon_mesh
+        config["phonon_displacement"] = phonon_displacement
+
+    return json.dumps(config, sort_keys=True)
 
 
 class ComparisonRow(BaseModel):
@@ -28,7 +52,7 @@ def run_eval_loop(
     pending: list[Structure],
     store,
     run_name: str,
-    calculator,
+    calculator_for,
     calculator_name: str,
     config_json: str,
     *,
@@ -42,20 +66,25 @@ def run_eval_loop(
     symprec: float = 1e-3,
 ) -> None:
     from rapmat.calculators import cleanup_calculator_files
+    from rapmat.calculators.vasp import preflight_potcars
     from rapmat.core.phonon import calculate_min_phonon_freq
     from rapmat.utils.console import get_logger
     logger = get_logger("rapmat.evaluation")
+
+    if pending:
+        preflight_potcars(calculator_for(pending[0].atoms), pending[0].atoms)
 
     n_total = len(pending)
     for i, rec in enumerate(pending, 1):
         atoms = rec.atoms.copy()
         atoms.pbc = True
-
-        cleanup_calculator_files(calculator)
-
-        atoms.calc = calculator
+        calculator = None
 
         try:
+            calculator = calculator_for(atoms)
+            cleanup_calculator_files(calculator)
+            atoms.calc = calculator
+
             ref_energy = atoms.get_potential_energy()
             ref_epa = ref_energy / len(atoms)
 
@@ -63,7 +92,7 @@ def run_eval_loop(
             if run_phonons:
                 ref_phonon_freq = calculate_min_phonon_freq(
                     atoms,
-                    calculator=calculator,
+                    calculator_for=calculator_for,
                     displacement=phonon_displacement,
                     supercell=phonon_supercell,
                     qpoint_mesh=phonon_mesh,

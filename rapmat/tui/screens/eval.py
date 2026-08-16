@@ -1,8 +1,8 @@
-import json
 from dataclasses import replace
 
 import urwid
 
+from rapmat.calculators import Calculators
 from rapmat.core.entities import ResultRow, Structure
 from rapmat.tui.keymap import KeyBinding
 from rapmat.tui.router import ScreenRouter
@@ -10,9 +10,14 @@ from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.screens.base_results import BaseResultsScreen, _yes_no
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.calc_fields import (
+    CALCULATOR_FIELD_KEYS,
+    SETTINGS_AUTO,
     calculator_fields,
+    calculator_run_config,
     parse_toml_config,
+    remember_vasp_command,
     setup_calculator_signals,
+    validate_calculator,
 )
 from rapmat.tui.widgets.form import (FormGroup, checkbox_field,
                                      float_field, int_field, tuple_field)
@@ -349,7 +354,10 @@ class EvalScreen(ScreenBase):
     def _build_frame(self) -> urwid.WidgetPlaceholder:
         self._form = FormGroup(
             [
-                *calculator_fields(calc_label="Ref. calculator"),
+                *calculator_fields(
+                    calc_label="Ref. calculator",
+                    calc_default=Calculators.VASP.value,
+                ),
                 int_field("top_n", "Top N (0 - all)", default=0),
                 checkbox_field(
                     "cached_only", "Cached only", default=False
@@ -365,7 +373,7 @@ class EvalScreen(ScreenBase):
             ],
             label_width=22,
             groups=[
-                ("Reference Calculator", ["calculator", "calculator_config"]),
+                ("Reference Calculator", CALCULATOR_FIELD_KEYS),
                 ("Phonon Settings", [
                     "run_phonons", "stable_only",
                     "phonon_supercell", "phonon_mesh",
@@ -466,13 +474,16 @@ class EvalScreen(ScreenBase):
 
         vals["run_name"] = run_name
 
-        calc_config_dict, toml_err = parse_toml_config(vals)
-        if toml_err:
-            self._error_text.set_text(("form_error", toml_err))
+        calc_err = validate_calculator(vals) or parse_toml_config(vals)[1]
+        if calc_err:
+            self._error_text.set_text(("form_error", calc_err))
             self._running = False
             return
 
+        calc_config_dict, _ = parse_toml_config(vals)
+
         vals["calculator_config_dict"] = calc_config_dict
+        remember_vasp_command(vals, log=self._progress_panel.add_log)
         self._eval_vals = vals
 
         self.run_task(
@@ -485,9 +496,10 @@ class EvalScreen(ScreenBase):
 
     def _worker(self, progress, vals: dict) -> None:
         from rapmat.calculators import Calculators, LogCalcCallback
-        from rapmat.calculators.factory import load_calculator
-        from rapmat.core.evaluation import (eval_rows_from_cache, run_eval_loop,
-                                            select_eval_records)
+        from rapmat.calculators.factory import CalculatorProvider
+        from rapmat.core.evaluation import (eval_rows_from_cache,
+                                            evaluation_config_key,
+                                            run_eval_loop, select_eval_records)
         from rapmat.utils.common import workdir_context
 
         store = self._state.store
@@ -496,6 +508,17 @@ class EvalScreen(ScreenBase):
         top_n = vals["top_n"]
         cached_only = vals.get("cached_only", False)
         run_phonons = vals["run_phonons"]
+
+        auto_settings = vals.get("calculator_settings") == SETTINGS_AUTO
+        meta = store.get_run_metadata(run_name)
+        monolayer = bool(meta and meta.domain == "monolayer")
+        if auto_settings:
+            from rapmat.calculators.vasp_auto import pymatgen_version
+
+            progress.log(
+                f"Auto (OMat24) settings from pymatgen {pymatgen_version()}; "
+                f"domain: {meta.domain if meta else 'unknown'}"
+            )
 
         from rapmat.storage.status import StructureStatus
 
@@ -523,14 +546,14 @@ class EvalScreen(ScreenBase):
             return
 
         self._records = records
-        config_dict = {"run_phonons": run_phonons}
-        config_dict["calculator_config"] = vals.get("calculator_config_dict", {})
-        if run_phonons:
-            config_dict["phonon_supercell"] = vals.get("phonon_supercell", (3, 3, 3))
-            config_dict["phonon_mesh"] = vals.get("phonon_mesh", (20, 20, 20))
-            config_dict["phonon_displacement"] = vals.get("phonon_displacement", 1e-2)
-
-        config_json = json.dumps(config_dict, sort_keys=True)
+        config_json = evaluation_config_key(
+            calculator_config=vals.get("calculator_config_dict", {}),
+            calculator_settings="auto" if auto_settings else "toml",
+            run_phonons=run_phonons,
+            phonon_supercell=vals.get("phonon_supercell", (3, 3, 3)),
+            phonon_mesh=vals.get("phonon_mesh", (20, 20, 20)),
+            phonon_displacement=vals.get("phonon_displacement", 1e-2),
+        )
 
         pending = [
             r
@@ -549,18 +572,21 @@ class EvalScreen(ScreenBase):
         if pending:
             with workdir_context(None) as wdir:
                 progress.log(f"Working directory: {wdir}")
-                calculator = load_calculator(
+                calculator_for = CalculatorProvider(
                     Calculators(calculator_name),
                     wdir,
-                    config=vals.get("calculator_config_dict", {}),
+                    config=calculator_run_config(vals),
                     callback=LogCalcCallback(progress.log),
+                    auto_settings=auto_settings,
+                    monolayer=monolayer,
+                    log_callback=progress.log,
                 )
 
                 run_eval_loop(
                     pending,
                     store,
                     run_name,
-                    calculator,
+                    calculator_for,
                     calculator_name,
                     config_json,
                     run_phonons=run_phonons,

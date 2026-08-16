@@ -26,8 +26,24 @@ if TYPE_CHECKING:
 # ------------------------------------------------------------------ #
 
 
+SETTINGS_TOML = "TOML file"
+SETTINGS_AUTO = "Auto (OMat24)"
+_SETTINGS_OPTIONS = [SETTINGS_TOML, SETTINGS_AUTO]
+
+CALCULATOR_FIELD_KEYS = [
+    "calculator",
+    "calculator_settings",
+    "calculator_config",
+    "vasp_command",
+]
+
+
 def _calc_options() -> list[str]:
     return [c.value for c in Calculators]
+
+
+def is_auto_settings(vals: dict) -> bool:
+    return vals.get("calculator_settings") == SETTINGS_AUTO
 
 
 # ------------------------------------------------------------------ #
@@ -38,13 +54,26 @@ def _calc_options() -> list[str]:
 def calculator_fields(
     *,
     calc_label: str = "Calculator",
+    calc_default: str | None = None,
     include_convergence: bool = False,
     force_conv_default: float = 5e-3,
     steps_max_default: int = 2000,
 ) -> list[_FieldSpec]:
+    from rapmat.app_config import resolve_vasp_command
+
+    options = _calc_options()
+    calc_index = options.index(calc_default) if calc_default in options else 0
+
     fields: list[_FieldSpec] = [
-        dropdown_field("calculator", calc_label, _calc_options(), default=0),
+        dropdown_field("calculator", calc_label, options, default=calc_index),
+        dropdown_field(
+            "calculator_settings",
+            "Settings",
+            _SETTINGS_OPTIONS,
+            default=_SETTINGS_OPTIONS.index(SETTINGS_AUTO),
+        ),
         text_field("calculator_config", "Config TOML Path", default=""),
+        text_field("vasp_command", "VASP command", default=resolve_vasp_command()),
     ]
     if include_convergence:
         fields.extend(
@@ -105,6 +134,18 @@ def _needs_external_config(calculator_value: str) -> bool:
         return False
 
 
+def _sync_calculator_fields(form: FormGroup) -> None:
+    vals = form.get_values()
+    external = _needs_external_config(vals.get("calculator", ""))
+    auto = is_auto_settings(vals)
+
+    form.set_field_disabled("calculator_settings", disabled=not external)
+    form.set_field_disabled("vasp_command", disabled=not external)
+    form.set_field_disabled(
+        "calculator_config", disabled=not external or auto
+    )
+
+
 def setup_calculator_signals(
     form: FormGroup,
     *,
@@ -112,17 +153,13 @@ def setup_calculator_signals(
     convergence_toggle_key: str | None = None,
 ) -> None:
     if disable_config_for_mlips:
-        calc_widget = form.get_widget("calculator")
-        if calc_widget is not None:
-            urwid.connect_signal(
-                calc_widget,
-                "change",
-                lambda _w, val: form.set_field_disabled(
-                    "calculator_config",
-                    disabled=not _needs_external_config(val),
-                ),
-            )
-            form.set_field_disabled("calculator_config", disabled=True)
+        for key in ("calculator", "calculator_settings"):
+            widget = form.get_widget(key)
+            if widget is not None:
+                urwid.connect_signal(
+                    widget, "change", lambda _w, _val: _sync_calculator_fields(form)
+                )
+        _sync_calculator_fields(form)
 
     if convergence_toggle_key:
         toggle_widget = form.get_widget(convergence_toggle_key)
@@ -144,6 +181,9 @@ def setup_calculator_signals(
 
 
 def parse_toml_config(vals: dict) -> tuple[dict, str | None]:
+    if is_auto_settings(vals):
+        return {}, None
+
     calc_config_path = vals.get("calculator_config", "").strip()
     if not calc_config_path:
         return {}, None
@@ -158,3 +198,41 @@ def parse_toml_config(vals: dict) -> tuple[dict, str | None]:
             return tomllib.load(f), None
     except Exception as e:
         return {}, f"Invalid TOML in config: {e}"
+
+
+def calculator_run_config(vals: dict) -> dict:
+    config = dict(vals.get("calculator_config_dict", {}))
+    command = vals.get("vasp_command", "").strip()
+    if command and _needs_external_config(vals.get("calculator", "")):
+        config["command"] = command
+    return config
+
+
+def validate_calculator(vals: dict) -> str | None:
+    if not _needs_external_config(vals.get("calculator", "")):
+        return None
+
+    if vals.get("vasp_command", "").strip():
+        return None
+
+    # NOTE: ASE also accepts a Python driver script, but it's is not a shell command
+    import os
+
+    if os.environ.get("VASP_SCRIPT", "").strip():
+        return None
+
+    return (
+        "VASP command is required "
+        "(or set ASE_VASP_COMMAND / VASP_COMMAND / VASP_SCRIPT)"
+    )
+
+
+def remember_vasp_command(vals: dict, log=None) -> None:
+    if not _needs_external_config(vals.get("calculator", "")):
+        return
+
+    from rapmat.app_config import persist_vasp_command
+
+    command = vals.get("vasp_command", "").strip()
+    if persist_vasp_command(command) and log:
+        log(f"Saved '{command}' as the default VASP command.")

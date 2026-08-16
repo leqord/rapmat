@@ -269,6 +269,12 @@ class FormGroup(urwid.WidgetWrap):
                 label_widget.set_text((label_attr, spec.label + ":"))
                 break
 
+    def is_field_disabled(self, key: str) -> bool:
+        row = self._row_by_key.get(key)
+        if row is None:
+            return False
+        return isinstance(row.contents[1][0].original_widget, urwid.WidgetDisable)
+
     def validate(self) -> list[str]:
         errors: list[str] = []
         for spec in self._fields:

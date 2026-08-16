@@ -7,12 +7,17 @@ from rapmat.tui.router import ScreenRouter
 from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.calc_fields import (
+    CALCULATOR_FIELD_KEYS,
     calculator_fields,
+    calculator_run_config,
+    is_auto_settings,
     parse_toml_config,
     phonon_fields,
+    remember_vasp_command,
     setup_calculator_signals,
+    validate_calculator,
 )
-from rapmat.tui.widgets.form import (FormGroup, checkbox_field,
+from rapmat.tui.widgets.form import (FormGroup, checkbox_field, dropdown_field,
                                      text_field)
 from rapmat.tui.widgets.progress import ProgressPanel
 
@@ -51,6 +56,9 @@ class PhononDispersionScreen(ScreenBase):
         self._form = FormGroup(
             [
                 text_field("structure_file", "Structure file", default=""),
+                dropdown_field(
+                    "domain", "Domain", ["bulk", "monolayer"], default=0
+                ),
                 *calculator_fields(
                     include_convergence=True,
                     force_conv_default=1e-3,
@@ -68,9 +76,9 @@ class PhononDispersionScreen(ScreenBase):
             ],
             label_width=22,
             groups=[
-                ("Input", ["structure_file"]),
+                ("Input", ["structure_file", "domain"]),
                 ("Calculator", [
-                    "calculator", "calculator_config",
+                    *CALCULATOR_FIELD_KEYS,
                     "force_conv_crit", "steps_max",
                 ]),
                 ("Phonon Settings", [
@@ -143,12 +151,13 @@ class PhononDispersionScreen(ScreenBase):
             )
             return
 
-        calc_config_dict, toml_err = parse_toml_config(vals)
-        if toml_err:
-            self._error_text.set_text(("form_error", toml_err))
+        calc_err = validate_calculator(vals) or parse_toml_config(vals)[1]
+        if calc_err:
+            self._error_text.set_text(("form_error", calc_err))
             return
 
-        vals["calculator_config_dict"] = calc_config_dict
+        vals["calculator_config_dict"] = parse_toml_config(vals)[0]
+        remember_vasp_command(vals, log=self._progress_panel.add_log)
 
         self._running = True
         self._error_text.set_text("")
@@ -170,7 +179,7 @@ class PhononDispersionScreen(ScreenBase):
         from ase.io import read as read_ase_structure
 
         from rapmat.calculators import Calculators, LogCalcCallback
-        from rapmat.calculators.factory import load_calculator
+        from rapmat.calculators.factory import CalculatorProvider
         from rapmat.core.phonon import (structure_calculate_phonons,
                                         structure_has_imag_phonon_freq)
         from rapmat.utils.common import workdir_context
@@ -200,13 +209,16 @@ class PhononDispersionScreen(ScreenBase):
             progress.log(f"Working directory: {wdir}")
             progress.update(1, 5, "Loading calculator")
             progress.log(f"Loading calculator {calculator_name}...")
-            calculator = load_calculator(
+            calculator_for = CalculatorProvider(
                 Calculators(calculator_name),
                 wdir,
-                config=vals.get("calculator_config_dict", {}),
+                config=calculator_run_config(vals),
                 callback=LogCalcCallback(_calc_status),
+                auto_settings=is_auto_settings(vals),
+                monolayer=vals.get("domain") == "monolayer",
+                log_callback=progress.log,
             )
-            structure.calc = calculator
+            structure.calc = calculator_for(structure)
 
             if prerelax:
                 progress.update(2, 5, "Pre-relaxing")
@@ -239,14 +251,14 @@ class PhononDispersionScreen(ScreenBase):
                 from rapmat.utils.structure import (DEFAULT_SYMPREC,
                                                     standardize_atoms)
 
-                calc = structure.calc
                 try:
                     structure = standardize_atoms(
                         structure,
                         to_primitive=True,
                         symprec=vals.get("phonon_symprec", DEFAULT_SYMPREC),
                     )
-                    structure.calc = calc
+                    # NOTE: re-derived
+                    structure.calc = calculator_for(structure)
                 except Exception as e:
                     progress.log(f"WARNING: Could not reduce cell: {e}")
 
@@ -258,6 +270,7 @@ class PhononDispersionScreen(ScreenBase):
                 supercell,
                 qpoint_mesh,
                 progress_callback=progress.update,
+                calculator_for=calculator_for,
             )
 
             is_unstable = structure_has_imag_phonon_freq(phonons, imag_cutoff)

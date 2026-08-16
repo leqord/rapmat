@@ -4,9 +4,13 @@ from rapmat.tui.router import ScreenRouter
 from rapmat.tui.screens.base import ScreenBase
 from rapmat.tui.state import AppState
 from rapmat.tui.widgets.calc_fields import (
+    CALCULATOR_FIELD_KEYS,
     calculator_fields,
+    is_auto_settings,
     parse_toml_config,
+    remember_vasp_command,
     setup_calculator_signals,
+    validate_calculator,
 )
 from rapmat.tui.widgets.dialog import ModalDialog
 from rapmat.tui.widgets.form import (FormGroup, checkbox_field, dropdown_field,
@@ -89,8 +93,7 @@ class StudyCreateScreen(ScreenBase):
                     "system", "name", "domain", "pressure", "thickness_cutoff",
                 ]),
                 ("Relaxation", [
-                    "calculator",
-                    "calculator_config",
+                    *CALCULATOR_FIELD_KEYS,
                     "force_conv_crit",
                     "steps_max",
                 ]),
@@ -177,10 +180,12 @@ class StudyCreateScreen(ScreenBase):
         name = vals["name"].strip()
         domain = vals["domain"]
         calculator = vals["calculator"]
-        calc_config_dict, toml_err = parse_toml_config(vals)
-        if toml_err:
-            self._error_text.set_text(("form_error", f"  {toml_err}"))
+        calc_err = validate_calculator(vals) or parse_toml_config(vals)[1]
+        if calc_err:
+            self._error_text.set_text(("form_error", f"  {calc_err}"))
             return
+        calc_config_dict, _ = parse_toml_config(vals)
+        remember_vasp_command(vals)
 
         try:
             from rapmat.utils.common import format_system, parse_system
@@ -207,6 +212,9 @@ class StudyCreateScreen(ScreenBase):
                 calculator=calculator,
                 config={
                     "calculator_config": calc_config_dict,
+                    "calculator_settings": (
+                        "auto" if is_auto_settings(vals) else "toml"
+                    ),
                     "thickness_cutoff": thickness_cutoff,
                     "pressure_gpa": vals["pressure"],
                     "force_conv_crit": vals["force_conv_crit"],

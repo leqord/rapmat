@@ -12,6 +12,7 @@ def structure_calculate_phonons(
     supercell: Tuple[int, int, int],
     qpoint_mesh: Tuple[int, int, int],
     progress_callback=None,
+    calculator_for=None,
 ) -> Phonopy:
     if atoms.calc is None:
         raise RuntimeError("No calculator set for the structure.")
@@ -57,7 +58,9 @@ def structure_calculate_phonons(
             pbc=True,
         )
 
-        ase_cell.calc = atoms.calc
+        ase_cell.calc = (
+            atoms.calc if calculator_for is None else calculator_for(ase_cell)
+        )
 
         forces = ase_cell.get_forces()
         sets_of_forces.append(forces)
@@ -73,7 +76,7 @@ def structure_calculate_phonons(
 def calculate_phonons_with_freq(
     atoms: Atoms,
     *,
-    calculator,
+    calculator_for,
     displacement: float,
     supercell: Tuple[int, int, int],
     qpoint_mesh: Tuple[int, int, int],
@@ -93,13 +96,14 @@ def calculate_phonons_with_freq(
         if log_callback and log_label:
             log_callback(f"Reducing {log_label}: {n_before} -> {len(atoms)} atoms")
 
-    atoms.calc = calculator
+    atoms.calc = calculator_for(atoms)
     phonons = structure_calculate_phonons(
         atoms,
         displacement=displacement,
         supercell=supercell,
         qpoint_mesh=qpoint_mesh,
         progress_callback=progress_callback,
+        calculator_for=calculator_for,
     )
     return phonons, get_mesh_min_frequency(phonons)
 
@@ -107,7 +111,7 @@ def calculate_phonons_with_freq(
 def calculate_min_phonon_freq(
     atoms: Atoms,
     *,
-    calculator,
+    calculator_for,
     displacement: float,
     supercell: Tuple[int, int, int],
     qpoint_mesh: Tuple[int, int, int],
@@ -119,7 +123,7 @@ def calculate_min_phonon_freq(
 ) -> float:
     _phonons, min_freq = calculate_phonons_with_freq(
         atoms,
-        calculator=calculator,
+        calculator_for=calculator_for,
         displacement=displacement,
         supercell=supercell,
         qpoint_mesh=qpoint_mesh,

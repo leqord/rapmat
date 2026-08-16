@@ -76,11 +76,8 @@ def _converged_row(atoms):
 
 
 def test_phonon_progress_does_not_reset_between_structures(monkeypatch):
-    """The structure-level bar must advance monotonically.
-    Regression test.
-    """
 
-    monkeypatch.setattr(ps, "load_calculator", lambda *a, **k: object())
+    monkeypatch.setattr(ps, "CalculatorProvider", lambda *a, **k: (lambda _atoms: object()))
 
     def fake_calc(atoms, *, progress_callback=None, **kwargs):
 

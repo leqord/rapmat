@@ -6,8 +6,6 @@ from dscribe.descriptors import SOAP
 
 
 class SOAPDescriptor:
-    """Computes averaged SOAP vectors."""
-
     def __init__(
         self,
         species: List[str],

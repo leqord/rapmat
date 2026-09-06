@@ -5,7 +5,6 @@ import pytest
 
 
 def test_render():
-    """Once in the past there was a crash."""
     from rapmat.storage import SQLiteStore
     from rapmat.tui.app import RapmatApp
     from rapmat.tui.screens.home import HomeScreen
@@ -49,11 +48,6 @@ def test_dialog_remap_covers_default_bg_attrs():
         assert twin_entry[3:] == entry[3:]
 
     assert DIALOG_REMAP[None] == "dialog"
-
-
-# ------------------------------------------------------------------ #
-#  Colour depth
-# ------------------------------------------------------------------ #
 
 
 def test_truecolor_leaves_named_palette_escapes_unchanged():

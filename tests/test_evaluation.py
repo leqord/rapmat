@@ -1,5 +1,3 @@
-"""Unit tests for rapmat.core.evaluation metric functions."""
-
 import pytest
 
 from rapmat.core.entities import Evaluation, ResultRow, Structure
@@ -11,10 +9,6 @@ from rapmat.core.evaluation import (ComparisonRow, comparison_from_result_rows,
 
 def _rows(dicts):
     return [ComparisonRow(**d) for d in dicts]
-
-# ------------------------------------------------------------------ #
-#  compute_ranking_metrics
-# ------------------------------------------------------------------ #
 
 
 class TestRankingMetrics:
@@ -141,11 +135,6 @@ class TestRankingMetrics:
         assert m["n_structures"] == 0
 
 
-# ------------------------------------------------------------------ #
-#  compute_stability_metrics
-# ------------------------------------------------------------------ #
-
-
 class TestStabilityMetrics:
     def test_perfect_classification(self):
         results = [
@@ -184,16 +173,16 @@ class TestStabilityMetrics:
 
     def test_mixed_classification(self):
         results = [
-            {"mlip_phonon_freq": 1.0, "ref_phonon_freq": 1.0},  # TP
-            {"mlip_phonon_freq": 1.0, "ref_phonon_freq": -1.0},  # FP
-            {"mlip_phonon_freq": -1.0, "ref_phonon_freq": 1.0},  # FN
-            {"mlip_phonon_freq": -1.0, "ref_phonon_freq": -1.0},  # TN
+            {"mlip_phonon_freq": 1.0, "ref_phonon_freq": 1.0},
+            {"mlip_phonon_freq": 1.0, "ref_phonon_freq": -1.0},
+            {"mlip_phonon_freq": -1.0, "ref_phonon_freq": 1.0},
+            {"mlip_phonon_freq": -1.0, "ref_phonon_freq": -1.0},
         ]
         m = compute_stability_metrics(_rows(results), phonon_cutoff=-0.15)
         assert m is not None
-        assert m["precision"] == pytest.approx(0.5)  # 1/(1+1)
-        assert m["recall"] == pytest.approx(0.5)  # 1/(1+1)
-        assert m["f1"] == pytest.approx(0.5)  # 2*0.5*0.5/(0.5+0.5)
+        assert m["precision"] == pytest.approx(0.5)
+        assert m["recall"] == pytest.approx(0.5)
+        assert m["f1"] == pytest.approx(0.5)
         assert m["n_stable_ref"] == 2
         assert m["n_stable_mlip"] == 2
 
@@ -227,11 +216,6 @@ class TestStabilityMetrics:
         m_strict = compute_stability_metrics(_rows(results), phonon_cutoff=-0.15)
         assert m_strict is not None
         assert m_strict["n_stable_ref"] == 0
-
-
-# ------------------------------------------------------------------ #
-#  Evaluation helpers
-# ------------------------------------------------------------------ #
 
 
 def _struct(sid, epa):

@@ -1,9 +1,3 @@
-"""Tests for VASP calculator initialization, config parsing, and CLI integration.
-
-All tests run without invoking VASP -- the ASE ``Vasp()`` constructor only
-stores parameters and does not launch any external process.
-"""
-
 from pathlib import Path
 
 import pytest
@@ -12,10 +6,6 @@ from ase.calculators.vasp import Vasp
 from rapmat.calculators import Calculators, cleanup_calculator_files
 from rapmat.calculators.factory import load_calculator
 from rapmat.calculators.vasp import build_calculator_vasp
-
-# ------------------------------------------------------------------ #
-#  3. build_calculator_vasp + factory routing
-# ------------------------------------------------------------------ #
 
 
 class TestBuildCalculatorVasp:

@@ -1,6 +1,3 @@
-"""This module uses pymatgen, trying to match the Omat24 protocol (arXiv:2410.12771) as much as possible.
-"""
-
 from __future__ import annotations
 
 import warnings
@@ -9,10 +6,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ase import Atoms
-
-# ------------------------------------------------------------------ #
-#  The OMat24 protocol
-# ------------------------------------------------------------------ #
 
 OMAT24_INCAR_OVERRIDES = {"ALGO": "Normal"}
 OMAT24_POTCAR_FUNCTIONAL = "PBE_54"
@@ -72,11 +65,6 @@ def resolve_potcar_version() -> tuple[str | None, str | None]:
         f"{potcar_set_name(OMAT24_POTCAR_VERSION)}"
     )
     return chosen, note
-
-
-# ------------------------------------------------------------------ #
-#  Generation
-# ------------------------------------------------------------------ #
 
 
 def _input_set(structure):
@@ -160,11 +148,6 @@ def _setups(site_symbols: list[str], potcar_symbols: list[str]) -> dict:
         if suffix:
             setups[element] = suffix
     return setups
-
-
-# ------------------------------------------------------------------ #
-#  Reporting
-# ------------------------------------------------------------------ #
 
 
 def describe_params(params: dict) -> str:

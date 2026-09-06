@@ -1,6 +1,3 @@
-"""SQLAlchemy-based StructureStore.
-"""
-
 import hashlib
 import json
 import threading
@@ -32,9 +29,6 @@ from rapmat.utils.console import get_logger
 
 
 class SQLiteStore(StructureStore):
-    # ------------------------------------------------------------------ #
-    #  Construction
-    # ------------------------------------------------------------------ #
 
     def __init__(
         self,
@@ -77,10 +71,6 @@ class SQLiteStore(StructureStore):
         with self._lock:
             with self._Session() as s:
                 yield s
-
-    # ------------------------------------------------------------------ #
-    #  Run management
-    # ------------------------------------------------------------------ #
 
     def create_run(
         self,
@@ -202,10 +192,6 @@ class SQLiteStore(StructureStore):
             ).all()
         return {status: int(cnt) for status, cnt in rows}
 
-    # ------------------------------------------------------------------ #
-    #  Run-level locking
-    # ------------------------------------------------------------------ #
-
     def claim_run(self, run_name: str, worker_id: str) -> bool:
         claimable = [
             str(RunStatus.PENDING),
@@ -276,10 +262,6 @@ class SQLiteStore(StructureStore):
             s.commit()
         return list(names)
 
-    # ------------------------------------------------------------------ #
-    #  Study management
-    # ------------------------------------------------------------------ #
-
     def create_study(
         self,
         study_id: str,
@@ -320,7 +302,6 @@ class SQLiteStore(StructureStore):
             s.commit()
 
     def delete_study(self, study_id: str) -> None:
-        # Runs, structures, evaluations and phonon rows cascade.
         with self._session() as s:
             s.execute(delete(Study).where(Study.study_id == study_id))
             s.commit()
@@ -333,10 +314,6 @@ class SQLiteStore(StructureStore):
         with self._session() as s:
             runs = s.scalars(select(Run).where(Run.study_id == study_id)).all()
         return [self._run_to_metadata(r, merged=False) for r in runs]
-
-    # ------------------------------------------------------------------ #
-    #  Generation placeholders and candidates
-    # ------------------------------------------------------------------ #
 
     def get_unrelaxed_candidates(self, run_name: str) -> List[Candidate]:
         with self._session() as s:
@@ -410,10 +387,6 @@ class SQLiteStore(StructureStore):
                 .values(status=str(StructureStatus.DISCARDED))
             )
             s.commit()
-
-    # ------------------------------------------------------------------ #
-    #  Structure updates
-    # ------------------------------------------------------------------ #
 
     def update_structure(
         self,
@@ -516,10 +489,6 @@ class SQLiteStore(StructureStore):
             calculator=row.calculator,
         )
 
-    # ------------------------------------------------------------------ #
-    #  Duplicate marking
-    # ------------------------------------------------------------------ #
-
     def mark_duplicates(
         self,
         dropped_ids: list[str],
@@ -558,10 +527,6 @@ class SQLiteStore(StructureStore):
                 s.commit()
             if on_batch is not None:
                 on_batch(len(batch))
-
-    # ------------------------------------------------------------------ #
-    #  Querying
-    # ------------------------------------------------------------------ #
 
     def get_structures_for_analysis(
         self,
@@ -647,10 +612,6 @@ class SQLiteStore(StructureStore):
         with self._session() as s:
             return int(s.scalar(select(func.count()).select_from(Structure)) or 0)
 
-    # ------------------------------------------------------------------ #
-    #  Evaluation records
-    # ------------------------------------------------------------------ #
-
     def add_evaluation(
         self,
         structure_id: str,
@@ -715,12 +676,7 @@ class SQLiteStore(StructureStore):
         with self._session() as s:
             return list(s.scalars(stmt).all())
 
-    # ------------------------------------------------------------------ #
-    #  Maintenance
-    # ------------------------------------------------------------------ #
-
     def vacuum(self) -> None:
-        """Full reclaim: rewrite the database, returning all free pages to the OS."""
         with self._lock:
             with self._engine.connect() as conn:
                 conn.execution_options(isolation_level="AUTOCOMMIT")
@@ -742,10 +698,6 @@ class SQLiteStore(StructureStore):
             except Exception:
                 pass
 
-    # ------------------------------------------------------------------ #
-    #  Raw access
-    # ------------------------------------------------------------------ #
-
     def _read(self, sql: str, params: tuple = ()) -> list[dict]:
         with self._lock:
             with self._engine.connect() as conn:
@@ -758,13 +710,7 @@ class SQLiteStore(StructureStore):
                 conn.exec_driver_sql(sql, params)
 
 
-# ------------------------------------------------------------------ #
-#  Helpers
-# ------------------------------------------------------------------ #
-
-
 def _excluded_set(stmt, model, *, pk: str) -> dict:
-    """INSERT-OR-REPLACE."""
     return {
         c.name: getattr(stmt.excluded, c.name)
         for c in model.__table__.columns

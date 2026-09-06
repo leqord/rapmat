@@ -1,5 +1,3 @@
-"""Calculator availability probing, including broken installs."""
-
 import importlib.util
 
 import rapmat.calculators as calcs

@@ -1,5 +1,3 @@
-"""Tests for DB config resolution, store factory, and run-level locking."""
-
 from datetime import datetime, timedelta
 
 import pytest
@@ -12,10 +10,6 @@ from rapmat.db_config import (
     save_db_config,
 )
 from rapmat.storage import SQLiteStore
-
-# ------------------------------------------------------------------ #
-#  load_db_config / clear_db_config
-# ------------------------------------------------------------------ #
 
 
 class TestDbConfig:
@@ -79,11 +73,6 @@ class TestDbConfig:
         assert clear_db_config() is False
 
 
-# ------------------------------------------------------------------ #
-#  Run-level locking
-# ------------------------------------------------------------------ #
-
-
 class TestRunLocking:
     @pytest.fixture(params=list(_BACKENDS))
     def store(self, request, tmp_path):
@@ -122,7 +111,6 @@ class TestRunLocking:
         store.create_run(name="dc-run", worker_id="w1", study_id="dc-run")
         assert store.claim_run("dc-run", "w1")
 
-        # Second claim should fail (status is now "processing")
         assert store.claim_run("dc-run", "w2") is False
 
     def test_claim_after_release(self, store):
@@ -167,7 +155,6 @@ class TestRunLocking:
         store.create_run(name="stale-run", worker_id="old-w", study_id="stale-run")
         store.claim_run("stale-run", "old-w")
 
-        # Manually set heartbeat to the past
         past_ts = (datetime.now() - timedelta(minutes=20)).isoformat()
         force_heartbeat(store, "stale-run", past_ts)
 

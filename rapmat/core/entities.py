@@ -1,6 +1,3 @@
-"""Typed domain entities.
-"""
-
 from __future__ import annotations
 
 from ase import Atoms
@@ -21,8 +18,6 @@ __all__ = [
 
 
 class Candidate(BaseModel):
-    """A generation placeholder or an unrelaxed candidate."""
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str
@@ -32,8 +27,6 @@ class Candidate(BaseModel):
 
 
 class RunMetadata(BaseModel):
-    """A run's metadata: run config + study config."""
-
     name: str
     domain: str = ""
     config: dict = Field(default_factory=dict)
@@ -48,8 +41,6 @@ class RunMetadata(BaseModel):
 
 
 class PhononResult(BaseModel):
-    """A stored phonon result for one structure."""
-
     min_phonon_freq: float | None = None
     params_gz: str = ""
     supercell: str | None = None
@@ -60,9 +51,6 @@ class PhononResult(BaseModel):
 
 
 class ResultRow(BaseModel):
-    """A row in a results/phase-analysis table.
-    """
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     structure: Structure
@@ -147,7 +135,6 @@ class ResultRow(BaseModel):
 
     @property
     def display_epa(self) -> float:
-        """Energy shown in the table: energy effective value (E/A or H/A), else raw E/atom."""
         # NOTE: misleading naming, change later
         if self.effective_per_atom is not None:
             return self.effective_per_atom

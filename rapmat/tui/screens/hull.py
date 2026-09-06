@@ -23,8 +23,6 @@ _SORT_OPTIONS: list[tuple[str, str]] = [
 
 
 def sort_result_rows(results: list[ResultRow], sort_key: str) -> None:
-    """Sort phase analysis rows in place and recalculate ``index``.
-    """
     inf = float("inf")
 
     def num(row: ResultRow, attr: str) -> float:
@@ -39,7 +37,7 @@ def sort_result_rows(results: list[ResultRow], sort_key: str) -> None:
         )
     elif sort_key == "energy":
         results.sort(key=lambda r: num(r, "effective_per_atom"))
-    else:  # "formation"
+    else:
         results.sort(
             key=lambda r: (num(r, "formation_energy"), num(r, "energy_above_hull"))
         )
@@ -87,10 +85,6 @@ class PhaseAnalysisScreen(BaseResultsScreen):
                 enabled=lambda: self._system_size == 2, priority=22,
             ),
         ]
-
-    # ------------------------------------------------------------------ #
-    #  Data fetch
-    # ------------------------------------------------------------------ #
 
     def _apply_fetch_result(self, box: dict) -> None:
         self._study_id = box.get("study_id", "")

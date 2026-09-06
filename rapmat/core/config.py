@@ -1,6 +1,3 @@
-"""Typed search/run configuration.
-"""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,8 +11,6 @@ def merge_config_dicts(
     domain: str = "",
     calculator: str = "",
 ) -> dict:
-    """Merge a study config with a run's batch config.
-    """
     merged = {**study_cfg, **batch_cfg}
     if domain:
         merged["domain"] = domain
@@ -27,26 +22,17 @@ def merge_config_dicts(
 
 
 class SearchConfig(BaseModel):
-    """Effective configuration for a search/run.
-
-    ``extra="ignore"`` allows old records with retired keys (e.g. ``dedup``,
-    ``dedup_threshold``) validate without error.
-    """
-
     model_config = ConfigDict(extra="ignore")
 
-    # Run
     formula: dict[str, int] = Field(default_factory=dict)
     formula_units: list[int] = Field(default_factory=lambda: [2, 4])
     candidates_per_group: int = 2
     seed: int | None = None
 
-    # Study columns
     system: str = ""
     domain: str = "bulk"
     calculator: str = "MATTERSIM"
 
-    # Method defaults
     calculator_config: dict = Field(default_factory=dict)
     calculator_settings: str = "toml" # NOTE: auto to derive per-structure
     symprec: float = 1e-2
@@ -71,7 +57,6 @@ class SearchConfig(BaseModel):
         domain: str = "",
         calculator: str = "",
     ) -> "SearchConfig":
-        """Build the effective config from the two stored config dicts."""
         return cls.model_validate(
             merge_config_dicts(
                 study_cfg,

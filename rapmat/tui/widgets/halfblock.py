@@ -1,6 +1,3 @@
-"""Paint an RGB framebuffer into a urwid canvas.
-"""
-
 import time
 from typing import Callable, Optional
 

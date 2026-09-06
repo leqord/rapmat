@@ -1,8 +1,3 @@
-"""Integration test for the main processing loop.
-
-The calculator factory is mocked (to avoid loading MatterSim/NequIP).
-"""
-
 from unittest.mock import patch
 
 import pytest
@@ -17,7 +12,6 @@ from rapmat.storage.status import RunStatus, StructureStatus
 
 @pytest.fixture
 def loop_env(tmp_path):
-    """Store with 3 pre-generated Cu candidates ready for the processing loop."""
     store = SQLiteStore.from_path(tmp_path / "loop_db")
 
     run_name = "loop-run"
@@ -55,7 +49,6 @@ def loop_env(tmp_path):
 
 @patch("rapmat.calculators.factory.load_calculator")
 def test_processing_loop_end_to_end(mock_load_calc, loop_env):
-    """Full pipeline: relax -> filter -> dedup -> store, using EMT."""
     mock_load_calc.return_value = EMT()
 
     run_processing_loop(
@@ -88,7 +81,6 @@ def test_processing_loop_end_to_end(mock_load_calc, loop_env):
 
 @patch("rapmat.calculators.factory.load_calculator")
 def test_dedup_flag_disabled_keeps_duplicates(mock_load_calc, tmp_path):
-    """When dedup=False, candidate/relaxed dedup blocks are bypassed."""
     store = SQLiteStore.from_path(tmp_path / "no_dedup_db")
 
     run_name = "no-dedup-run"
@@ -131,11 +123,6 @@ def test_dedup_flag_disabled_keeps_duplicates(mock_load_calc, tmp_path):
     assert counts.get("relaxed", 0) >= 2
     assert counts.get("discarded", 0) == 0
     assert counts.get("error", 0) == 0
-
-
-# ---------------------------------------------------------------------------
-# Claimed run lifecycle
-# ---------------------------------------------------------------------------
 
 
 @patch("rapmat.calculators.factory.load_calculator")

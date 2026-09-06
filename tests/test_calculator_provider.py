@@ -1,5 +1,3 @@
-"""Tests for CalculatorProvider."""
-
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,11 +9,6 @@ from rapmat.calculators import Calculators
 from rapmat.calculators.factory import CalculatorProvider
 from rapmat.core.config import SearchConfig
 from rapmat.core.evaluation import evaluation_config_key
-
-
-# ------------------------------------------------------------------ #
-#  Sharing vs per-structure
-# ------------------------------------------------------------------ #
 
 
 class TestStaticConfig:
@@ -114,11 +107,6 @@ class TestAutoSettings:
         assert isinstance(provider(bulk("Si", "diamond", a=5.43)), Vasp)
 
 
-# ------------------------------------------------------------------ #
-#  Per-calculation directories
-# ------------------------------------------------------------------ #
-
-
 class TestPerCallDirectories:
     def test_each_call_gets_its_own_directory(self, tmp_path):
         provider = CalculatorProvider(Calculators.VASP, tmp_path)
@@ -201,11 +189,6 @@ class TestPerCallDirectories:
         finalize_provider(lambda atoms: None)
 
 
-# ------------------------------------------------------------------ #
-#  Evaluation cache key
-# ------------------------------------------------------------------ #
-
-
 class TestEvaluationConfigKey:
     def test_auto_and_toml_do_not_collide(self):
         toml = evaluation_config_key(
@@ -248,11 +231,6 @@ class TestEvaluationConfigKey:
             calculator_config={}, run_phonons=True, phonon_mesh=(9, 9, 9)
         )
         assert a != b
-
-
-# ------------------------------------------------------------------ #
-#  Config persistence: study -> run -> resume
-# ------------------------------------------------------------------ #
 
 
 class TestSearchConfigMode:

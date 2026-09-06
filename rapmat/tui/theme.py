@@ -1,13 +1,6 @@
-"""Shared urwid palette and terminal color depth negotiation.
-"""
-
 import os
 import sys
 from collections.abc import Mapping
-
-# ------------------------------------------------------------------ #
-#  Global palette
-# ------------------------------------------------------------------ #
 
 PALETTE = [
     ("header", "white", "dark blue", "bold"),
@@ -41,10 +34,6 @@ PALETTE = [
     ("dim_title", "dark gray", "default", "bold"),
 ]
 
-# ------------------------------------------------------------------ #
-#  Dialog attribute remap
-# ------------------------------------------------------------------ #
-
 DIALOG_BG = "dark gray"
 
 DIALOG_REMAP: dict = {None: "dialog"}
@@ -59,10 +48,6 @@ for _name, _fg, _bg, *_rest in PALETTE:
 
 PALETTE.extend(_dialog_variants)
 
-
-# ------------------------------------------------------------------ #
-#  Color depth
-# ------------------------------------------------------------------ #
 
 TRUECOLOR = 2 ** 24
 

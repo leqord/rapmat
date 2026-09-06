@@ -51,10 +51,6 @@ class StatusScreen(ScreenBase):
         self._errors_text: urwid.Text | None = None
         self._widget: urwid.Widget | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._widget = self._build_widget()
         self.refresh_footer()
@@ -67,10 +63,6 @@ class StatusScreen(ScreenBase):
                 help="Re-probe the installed calculators", priority=10,
             ),
         ]
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _build_widget(self) -> urwid.Widget:
         from rapmat.config import APP_CONFIG_DIR, APP_DATA_DIR
@@ -125,10 +117,6 @@ class StatusScreen(ScreenBase):
             )
         else:
             self._errors_text.set_text("")
-
-    # ------------------------------------------------------------------ #
-    #  Input
-    # ------------------------------------------------------------------ #
 
     def _action_refresh(self) -> None:
         if self._table is not None:

@@ -27,8 +27,6 @@ def _build_file_handler() -> logging.Handler:
 
 
 def configure_logging() -> None:
-    """Route all logging to ``background.log`` and keep it off the TUI.
-    """
     global _configured
     if _configured:
         return

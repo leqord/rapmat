@@ -1,5 +1,3 @@
-"""Tests for the run working directory root."""
-
 from pathlib import Path
 
 from rapmat import app_config

@@ -1,6 +1,3 @@
-"""The spglib isolation worker must keep an spglib crash from killing the app.
-"""
-
 import pytest
 from ase import Atoms
 from ase.build import bulk
@@ -42,7 +39,6 @@ def isolated(monkeypatch):
 
 
 def test_isolation_normal_structure(isolated):
-    """A normal structure resolves normally."""
     from rapmat.utils.structure import format_spg
 
     s = format_spg(bulk("Si", "diamond", a=5.43), symprec=1e-3)
@@ -50,7 +46,6 @@ def test_isolation_normal_structure(isolated):
 
 
 def test_isolation_survives_crashing_cell(isolated):
-    """The cell and symprec combination that crashes spglib."""
     from rapmat.utils.structure import format_spg
 
     atoms = Atoms(

@@ -1,6 +1,3 @@
-"""Tests for logging configuration.
-"""
-
 import io
 import logging
 
@@ -11,8 +8,6 @@ from rapmat.utils import console
 
 @pytest.fixture
 def isolated_logging(tmp_path, monkeypatch):
-    """Run ``configure_logging`` with a temp log file with global logging
-    state snapshotted and restored."""
     log_dir = tmp_path / "logs"
     log_file = log_dir / "background.log"
     monkeypatch.setattr(console, "_LOG_DIR", log_dir)
@@ -46,8 +41,6 @@ def isolated_logging(tmp_path, monkeypatch):
 
 
 def test_rapmat_logs_do_not_reach_root_stream(isolated_logging):
-    """A stderr-like handler on root (as basicConfig adds) must never see
-    rapmat records, otherwise they paint over the TUI."""
     console.configure_logging()
 
     stream = io.StringIO()
@@ -62,8 +55,6 @@ def test_rapmat_logs_do_not_reach_root_stream(isolated_logging):
 
 
 def test_basicconfig_is_a_noop_after_configure(isolated_logging):
-    """Because root already owns a handler, a library calling basicConfig later
-    must not be able to install a StreamHandler."""
     console.configure_logging()
 
     def plain_stream_handlers(logger):
@@ -85,7 +76,6 @@ def test_basicconfig_is_a_noop_after_configure(isolated_logging):
 
 
 def test_logger_hierarchy_is_configured_once(isolated_logging):
-    """rapmat owns a single handler and does not propagate."""
     console.configure_logging()
     console.configure_logging() 
 

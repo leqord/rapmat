@@ -42,11 +42,6 @@ REQUIRES_EXTERNAL_CONFIG: frozenset[Calculators] = frozenset({
 
 
 def probe_calculator(calc: Calculators) -> tuple[bool, str | None]:
-    """(available, import error).
-
-    A package that is installed but fails to import 
-    counts as unavailable, with the error message returned.
-    """
     try:
         found = importlib.util.find_spec(CALCULATOR_META[calc]["probe"]) is not None
         return found, None
@@ -63,11 +58,6 @@ def is_calculator_available(calc: Calculators) -> bool:
 def get_install_hint(calc: Calculators) -> str | None:
     extra = CALCULATOR_META[calc]["extra"]
     return f"pip install rapmat[{extra}]" if extra else None
-
-
-# ------------------------------------------------------------------ #
-#  Calculator loading callback protocol
-# ------------------------------------------------------------------ #
 
 
 @runtime_checkable

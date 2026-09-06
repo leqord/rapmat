@@ -55,10 +55,6 @@ class HomeScreen(ScreenBase):
         self._widget: urwid.Widget | None = None
         self._db_info_text: urwid.Text | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._state.refresh_runs_if_needed()
         self._widget = self._build_widget()
@@ -105,10 +101,6 @@ class HomeScreen(ScreenBase):
 
     def esc_label(self) -> str:
         return ""
-
-    # ------------------------------------------------------------------ #
-    #  Layout helpers
-    # ------------------------------------------------------------------ #
 
     def _build_widget(self) -> urwid.Widget:
         def _btn(label: str, callback) -> urwid.Widget:
@@ -193,7 +185,6 @@ class HomeScreen(ScreenBase):
         ]
 
     def refresh_hw_label(self) -> None:
-        """Re-render the DB-info panel once background detection completes."""
         if self._db_info_text is not None:
             self._db_info_text.set_text(self._db_info_lines())
 
@@ -214,10 +205,6 @@ class HomeScreen(ScreenBase):
     def _refresh_recent_table(self) -> None:
         recent_data = self._get_recent_runs()
         self._recent_table.set_data(recent_data)
-
-    # ------------------------------------------------------------------ #
-    #  Callbacks
-    # ------------------------------------------------------------------ #
 
     def _go_new_run(self, _btn: urwid.Button | None = None) -> None:
         from rapmat.tui.screens.csp_search import CSPSearchScreen

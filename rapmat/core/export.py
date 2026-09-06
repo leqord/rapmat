@@ -1,6 +1,3 @@
-"""Structure and results-table export helpers.
-"""
-
 from __future__ import annotations
 
 import csv
@@ -20,11 +17,6 @@ def save_structure(
     symprec: float = 1e-3,
     prefix: str = "",
 ) -> Path:
-    """Write one structure as ``{prefix}structure_{ident}.{fmt}`` in ``directory``.
-
-    ``cell_mode``: "As-is" | "Conventional" | "Primitive". 
-    Returns the written path.
-    """
     from ase.io import write as write_ase_structure
 
     from rapmat.utils.structure import standardize_atoms
@@ -47,10 +39,6 @@ def export_results_table(
     directory: str | Path,
     fmt: str,
 ) -> Path:
-    """Write ``results_table.{fmt}`` from precomputed headers/rows.
-
-    ``fmt`` is "txt" or "csv". Returns the path.
-    """
     out_dir = Path(directory)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"results_table.{fmt}"

@@ -20,8 +20,6 @@ def _spglib_cell(atoms: Atoms) -> tuple:
 
 
 def calculate_thickness(atoms: Atoms, axis: int = 2) -> float:
-    """Slab thickness along ``axis``: 
-    cell length minus the largest pairvise next-nearest-neighbor fractional gap."""
     if len(atoms) == 0:
         return 0.0
 

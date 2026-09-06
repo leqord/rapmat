@@ -12,19 +12,10 @@ from rapmat.storage.base import StructureStore
 from rapmat.storage.status import StructureStatus
 from rapmat.utils.common import parse_system
 
-# ------------------------------------------------------------------ #
-#  Helpers
-# ------------------------------------------------------------------ #
-
 
 def get_composition_fraction(formula: dict[str, int], element: str) -> float:
     total = sum(formula.values())
     return formula.get(element, 0) / total if total else 0.0
-
-
-# ------------------------------------------------------------------ #
-#  Fetching and filtering
-# ------------------------------------------------------------------ #
 
 
 def _effective_epa(s: Structure, use_enthalpy: bool) -> float:
@@ -39,8 +30,6 @@ def collect_study_structures(
     *,
     symprec: float = 1e-3,
 ) -> tuple[list[Structure], str, bool]:
-    """Gather every relaxed structure across all study's runs.
-    """
     study = store.get_study(study_id)
     if study is None:
         raise ValueError(f"Study '{study_id}' not found.")
@@ -63,10 +52,6 @@ def hull_input(
     hide_duplicates: bool = False,
     hide_excluded: bool = True,
 ) -> list[Structure]:
-    """The set that shapes the hull is what the table shows, except the view filters.
-
-    View filters (e.g. thickness, EAH cutoff) never reach here.
-    """
     out: list[Structure] = []
     for s in structures:
         if hide_unconverged and not s.converged:
@@ -79,11 +64,6 @@ def hull_input(
     return out
 
 
-# ------------------------------------------------------------------ #
-#  Reference energies
-# ------------------------------------------------------------------ #
-
-
 def _is_pure(comp: Composition, element: str) -> bool:
     return len(comp.elements) == 1 and comp.elements[0].symbol == element
 
@@ -94,8 +74,6 @@ def _reference_structures(
     *,
     use_enthalpy: bool = False,
 ) -> dict[str, tuple[float, str]]:
-    """For each element, the lowest-energy pure structure.
-    """
     refs: dict[str, tuple[float, str]] = {}
     for el in elements:
         best: tuple[float, str] | None = None
@@ -126,11 +104,6 @@ def get_reference_energies(
     }
 
 
-# ------------------------------------------------------------------ #
-#  Phase diagram construction
-# ------------------------------------------------------------------ #
-
-
 def build_phase_diagram(
     structures: list[Structure],
     system: str,
@@ -139,8 +112,6 @@ def build_phase_diagram(
     show_all: bool = True,
     hull_cutoff: float = 0.0,
 ) -> tuple[PhaseDiagram, list[ResultRow]]:
-    """Build the convex hull from the given structures.
-    """
     elements = parse_system(system)
     if len(elements) < 2:
         raise ValueError(
@@ -214,8 +185,6 @@ def build_energy_ranking(
     show_all: bool = True,
     hull_cutoff: float = 0.0,
 ) -> list[ResultRow]:
-    """Energy ranking for single-element systems, from the given structures.
-    """
     structure_data = [
         ResultRow(
             structure=s,
@@ -242,11 +211,6 @@ def build_energy_ranking(
         ]
 
     return structure_data
-
-
-# ------------------------------------------------------------------ #
-#  Binary hull plotting
-# ------------------------------------------------------------------ #
 
 
 def plot_binary_hull(

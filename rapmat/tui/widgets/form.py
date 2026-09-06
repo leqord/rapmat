@@ -5,10 +5,6 @@ import urwid
 
 from rapmat.tui.widgets.dropdown import DropdownSelect
 
-# ------------------------------------------------------------------ #
-#  Internal field descriptors
-# ------------------------------------------------------------------ #
-
 
 @dataclass
 class _FieldSpec:
@@ -19,11 +15,6 @@ class _FieldSpec:
     radio_buttons: list[urwid.RadioButton] = field(default_factory=list)
     int_edits: list[urwid.IntEdit] = field(default_factory=list)
     validator: Any = None
-
-
-# ------------------------------------------------------------------ #
-#  Factory helpers
-# ------------------------------------------------------------------ #
 
 
 def text_field(
@@ -80,7 +71,7 @@ def radio_field(
     group: list[urwid.RadioButton] = []
     for i, opt in enumerate(options):
         rb = urwid.RadioButton(group, opt, state=(i == default))
-        _ = rb  # suppress unused warning
+        _ = rb
     pile = urwid.Pile(group)
     return _FieldSpec(
         key=key, label=label, kind="radio", widget=pile, radio_buttons=group
@@ -114,11 +105,6 @@ def tuple_field(
     return _FieldSpec(key=key, label=label, kind="tuple", widget=cols, int_edits=edits)
 
 
-# ------------------------------------------------------------------ #
-#  Focus-aware group box
-# ------------------------------------------------------------------ #
-
-
 def create_focus_group(title: str, content: urwid.Widget) -> urwid.Widget:
     inner = urwid.AttrMap(content, "body")
     box = urwid.LineBox(
@@ -137,11 +123,6 @@ def create_focus_group(title: str, content: urwid.Widget) -> urwid.Widget:
     )
 
 
-# ------------------------------------------------------------------ #
-#  FormGroup
-# ------------------------------------------------------------------ #
-
-
 class FormGroup(urwid.WidgetWrap):
 
     def __init__(
@@ -155,10 +136,6 @@ class FormGroup(urwid.WidgetWrap):
         self._row_by_key: dict[str, urwid.Columns] = {}
         pile = urwid.Pile(self._build_rows(groups))
         super().__init__(pile)
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _make_row(self, spec: _FieldSpec) -> urwid.Columns:
         label = urwid.Text(("form_label", spec.label + ":"), align="right")
@@ -203,10 +180,6 @@ class FormGroup(urwid.WidgetWrap):
             widgets.append(create_focus_group("Other", pile))
 
         return widgets
-
-    # ------------------------------------------------------------------ #
-    #  Public API
-    # ------------------------------------------------------------------ #
 
     def get_values(self) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -289,10 +262,6 @@ class FormGroup(urwid.WidgetWrap):
                 if msg:
                     errors.append(f"{spec.label}: {msg}")
         return errors
-
-    # ------------------------------------------------------------------ #
-    #  Internal
-    # ------------------------------------------------------------------ #
 
     def _read_value(self, spec: _FieldSpec) -> Any:
         if spec.kind == "text":

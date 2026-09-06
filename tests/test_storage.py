@@ -29,7 +29,6 @@ def test_soap_descriptor_basics():
 
 
 def test_run_lifecycle(store):
-    """Create a run, add candidates, update to relaxed, query back."""
     atoms = bulk("Si", "diamond", a=5.43)
 
     store.create_study("test-study", "Si", "bulk", "mattersim")
@@ -73,7 +72,6 @@ def test_run_lifecycle(store):
 
 
 def test_add_generation_placeholders_batch(store):
-    """One placeholders call inserts multiple candidates and they are readable."""
     atoms = bulk("Si", "diamond", a=5.43)
 
     store.create_study("batch-study", "Si", "bulk", "mattersim")
@@ -98,7 +96,6 @@ def test_add_generation_placeholders_batch(store):
 
 
 def test_phonon_min_freq_persistence(store):
-    """save_phonon_result persists min_phonon_freq, get_structures returns it."""
     atoms = bulk("Si", "diamond", a=5.43)
 
     store.create_study("phonon-study", "Si", "bulk", "mattersim")
@@ -124,7 +121,6 @@ def test_phonon_min_freq_persistence(store):
 
 
 def test_phonon_result_persistence_and_clear(store):
-    """The blob lives in phonon_params."""
     atoms = bulk("Si", "diamond", a=5.43)
 
     store.create_study("pb-study", "Si", "bulk", "mattersim")
@@ -170,7 +166,6 @@ def test_phonon_result_persistence_and_clear(store):
 
 
 def test_initial_and_final_atoms_preserved(store):
-    """Both initial and final atoms survive the add / update cycle."""
     store.create_study("dual-study", "Si", "bulk", "mattersim")
     run_id = store.create_run(name="dual-run", study_id="dual-study")
     store.update_run_config(run_id, {"formula": {"Si": 1}})
@@ -209,7 +204,6 @@ def test_initial_and_final_atoms_preserved(store):
 
 
 def test_spg_recomputation(store):
-    """Different symprec values should produce different SPG results for the same atoms."""
     store.create_study("spg-study", "Si", "bulk", "mattersim")
     run_id = store.create_run(name="spg-run", study_id="spg-study")
     store.update_run_config(run_id, {"formula": {"Si": 1}})
@@ -238,7 +232,6 @@ def test_spg_recomputation(store):
 
 
 def test_derived_fields_roundtrip(store):
-    """formula/volume/energy_total/enthalpy/thickness are derived at read time."""
     from ase.units import GPa
 
     atoms = bulk("Si", "diamond", a=5.43)
@@ -277,7 +270,6 @@ def test_derived_fields_roundtrip(store):
 
 
 def test_get_structures_progress_callback(store):
-    """get_structures reports per-record progress via the optional callback."""
     store.create_study("prog-study", "Si", "bulk", "mattersim")
     store.create_run(name="prog-run", study_id="prog-study")
 
@@ -301,8 +293,6 @@ def test_get_structures_progress_callback(store):
 
 
 def test_mark_duplicates_progress_callback(store):
-    """mark_duplicates reports monotonic progress ending at (total, total)
-    while still applying the flags correctly."""
     store.create_study("dup-study", "Si", "bulk", "mattersim")
     store.create_run(name="dup-run", study_id="dup-study")
 
@@ -333,7 +323,6 @@ def test_mark_duplicates_progress_callback(store):
 
 
 def test_clear_run_duplicates(store):
-    """clear_run_duplicates resets the duplicate flag on every structure."""
     store.create_study("dc-study", "Si", "bulk", "mattersim")
     store.create_run(name="dc-run", study_id="dc-study")
 
@@ -351,7 +340,6 @@ def test_clear_run_duplicates(store):
 
 
 def test_set_structure_excluded_roundtrip(store):
-    """set_structure_excluded persists per structure and defaults to False."""
     store.create_study("ex-study", "Si", "bulk", "mattersim")
     store.create_run(name="ex-run", study_id="ex-study")
 
@@ -371,14 +359,7 @@ def test_set_structure_excluded_roundtrip(store):
     assert flags[ids[1]] is False
 
 
-# ------------------------------------------------------------------ #
-#  Status enums round-trip through storage exactly
-# ------------------------------------------------------------------ #
-
-
 def test_status_roundtrip_all_enums(store):
-    """Every RunStatus/StructureStatus value survives storage exatly.
-    """
     from rapmat.storage.status import RunStatus, StructureStatus
 
     store.create_study("rt-study", "Si", "bulk", "mattersim")
@@ -402,8 +383,6 @@ def test_status_roundtrip_all_enums(store):
 
 
 def test_schema_reapplies_on_reconnect(store_factory):
-    """Schema is idempotent across reconnects to the same database, and existing
-    data survives (all backends)."""
     from rapmat.storage.status import RunStatus
 
     store = store_factory("reopen_db")
@@ -421,7 +400,6 @@ def test_schema_reapplies_on_reconnect(store_factory):
 
 
 def test_set_run_config_value_no_leak(store):
-    """A per-run override writes only run keys (no leaks to study) and wins on read."""
     store.create_study("s", "Si", "bulk", "mattersim", config={"symprec": 1e-3})
     store.create_run(name="r", study_id="s", config={"formula": {"Si": 1}})
 
@@ -432,7 +410,6 @@ def test_set_run_config_value_no_leak(store):
 
 
 def test_set_study_config_value_leaves_runs_untouched(store):
-    """The study default is written to the study, runs inherit it via the merge."""
     store.create_study("s", "Si", "bulk", "mattersim", config={})
     store.create_run(name="r", study_id="s", config={"formula": {"Si": 1}})
 

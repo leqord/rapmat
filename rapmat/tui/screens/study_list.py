@@ -57,10 +57,6 @@ class StudyListScreen(ScreenBase):
         self._details_content: urwid.WidgetPlaceholder | None = None
         self._details_panel: urwid.Widget | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._widget = urwid.WidgetPlaceholder(urwid.SolidFill())
         self._state.refresh_studies_if_needed()
@@ -98,10 +94,6 @@ class StudyListScreen(ScreenBase):
 
     def extra_hints(self) -> list:
         return [("Enter", "Open", 5)]
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _build_widget(self) -> urwid.Widget:
         self._all_rows = _enrich_studies(self._state)
@@ -142,10 +134,6 @@ class StudyListScreen(ScreenBase):
         if self._table:
             self._on_study_focus_change(self._table.get_focused_row())
         return urwid.Padding(self._body_pile, left=1, right=1)
-
-    # ------------------------------------------------------------------ #
-    #  Search helpers
-    # ------------------------------------------------------------------ #
 
     def _apply_search(self, query: str) -> None:
         if not query:
@@ -191,10 +179,6 @@ class StudyListScreen(ScreenBase):
 
     def _submit_search(self) -> None:
         self._leave_search_mode()
-
-    # ------------------------------------------------------------------ #
-    #  Callbacks
-    # ------------------------------------------------------------------ #
 
     def _on_study_focus_change(self, study: dict | None) -> None:
         if getattr(self, "_details_content", None) is None:

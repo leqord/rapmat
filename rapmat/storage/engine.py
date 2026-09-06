@@ -1,6 +1,3 @@
-"""Engine construction and schema migration.
-"""
-
 from pathlib import Path
 
 from alembic import command
@@ -25,8 +22,6 @@ def _set_sqlite_pragmas(dbapi_conn, _record) -> None:
 
 
 def make_engine(db_file: str) -> Engine:
-    """One shared connection.
-    """
     if db_file == ":memory:":
         eng = create_engine(
             "sqlite://",
@@ -44,8 +39,6 @@ def make_engine(db_file: str) -> Engine:
 
 
 def _raw_pragma(engine: Engine, sql: str) -> None:
-    """Execute a PRAGMA outside any transaction.
-    """
     raw = engine.raw_connection()
     try:
         raw.driver_connection.execute(sql)

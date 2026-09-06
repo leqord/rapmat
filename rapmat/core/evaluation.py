@@ -31,8 +31,6 @@ def evaluation_config_key(
 
 
 class ComparisonRow(BaseModel):
-    """One structure compared between the MLIP and a reference calculator."""
-
     id: str = ""
     formula: str = ""
     mlip_epa: float = 0.0
@@ -41,11 +39,6 @@ class ComparisonRow(BaseModel):
     ref_phonon_freq: float | None = None
     mlip_rank: int | None = None
     ref_rank: int | None = None
-
-
-# ------------------------------------------------------------------ #
-#  Evaluation loop (used by TUI and tests)
-# ------------------------------------------------------------------ #
 
 
 def run_eval_loop(
@@ -147,11 +140,6 @@ def run_eval_loop(
     finalize_provider(calculator_for)
 
 
-# ------------------------------------------------------------------ #
-#  Pure metric helpers
-# ------------------------------------------------------------------ #
-
-
 def compute_ranking_metrics(
     results: Sequence[ComparisonRow],
     phonon_cutoff: float = -0.15,
@@ -246,14 +234,7 @@ def compute_stability_metrics(
     }
 
 
-# ------------------------------------------------------------------ #
-#  Evaluation helpers
-# ------------------------------------------------------------------ #
-
-
 def select_eval_records(records: Sequence, top_n: int) -> list:
-    """Order candidate structures by MLIP energy and keep the lowest ``top_n``.
-    """
     ordered = sorted(records, key=lambda r: r.energy_per_atom)
     if top_n and top_n > 0:
         ordered = ordered[:top_n]
@@ -261,8 +242,6 @@ def select_eval_records(records: Sequence, top_n: int) -> list:
 
 
 def eval_rows_from_cache(records: Sequence, eval_map: dict, run_name: str) -> list:
-    """Build :class:`ResultRow`s for records that have a cached evaluation.
-    """
     from rapmat.core.entities import ResultRow
 
     rows: list = []
@@ -283,8 +262,6 @@ def eval_rows_from_cache(records: Sequence, eval_map: dict, run_name: str) -> li
 
 
 def comparison_from_result_rows(rows: Sequence) -> list[ComparisonRow]:
-    """Map evaluated :class:`ResultRow`s to :class:`ComparisonRow`s.
-    """
     out: list[ComparisonRow] = []
     for r in rows:
         if r.ref_energy_per_atom is None:

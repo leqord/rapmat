@@ -1,6 +1,3 @@
-"""Tests for the per-structure VASP settings auto-generator.
-"""
-
 import tomllib
 
 import pytest
@@ -40,11 +37,6 @@ def fe_oxide_interleaved():
     )
 
 
-# ------------------------------------------------------------------ #
-#  The OMat24 protocol
-# ------------------------------------------------------------------ #
-
-
 class TestOmat24Protocol:
     def test_algo_normal(self, si):
         assert omat24_vasp_params(si)["algo"] == "Normal"
@@ -73,11 +65,6 @@ class TestOmat24Protocol:
         assert large > small
 
 
-# ------------------------------------------------------------------ #
-#  k-mesh
-# ------------------------------------------------------------------ #
-
-
 class TestKpoints:
     def test_gamma_centred(self, si):
         assert omat24_vasp_params(si)["gamma"] is True
@@ -102,11 +89,6 @@ class TestKpoints:
         atoms = mx2("MoS2", vacuum=1.0)
         assert omat24_vasp_params(atoms, monolayer=False)["kpts"][2] > 1
         assert omat24_vasp_params(atoms, monolayer=True)["kpts"][2] == 1
-
-
-# ------------------------------------------------------------------ #
-#  MAGMOM ordering and dtype
-# ------------------------------------------------------------------ #
 
 
 class TestMagmom:
@@ -136,11 +118,6 @@ class TestMagmom:
             assert params["magmom"][index] == expected
 
 
-# ------------------------------------------------------------------ #
-#  Hubbard U
-# ------------------------------------------------------------------ #
-
-
 class TestHubbardU:
     def test_applied_to_oxide(self, fe_oxide_interleaved):
         ldau = omat24_vasp_params(fe_oxide_interleaved)["ldau_luj"]
@@ -164,11 +141,6 @@ class TestHubbardU:
         assert "ldauj" not in params
 
 
-# ------------------------------------------------------------------ #
-#  POTCAR setups
-# ------------------------------------------------------------------ #
-
-
 class TestSetups:
     def test_mp_recommended_setup(self, fe):
         assert omat24_vasp_params(fe)["setups"] == {"Fe": "_pv"}
@@ -183,11 +155,6 @@ class TestSetups:
     def test_omat24_w_override(self):
         atoms = bulk("W", "bcc", a=3.16)
         assert omat24_vasp_params(atoms)["setups"]["W"] == "_sv"
-
-
-# ------------------------------------------------------------------ #
-#  ASE acceptance
-# ------------------------------------------------------------------ #
 
 
 class TestAseAcceptance:
@@ -213,11 +180,6 @@ class TestAseAcceptance:
         calc = build_calculator_vasp(params, directory=tmp_path)
         assert isinstance(calc, Vasp)
         assert calc.directory == str(tmp_path)
-
-
-# ------------------------------------------------------------------ #
-#  Reporting
-# ------------------------------------------------------------------ #
 
 
 class TestDescribeParams:

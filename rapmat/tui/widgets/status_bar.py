@@ -22,10 +22,6 @@ class StatusBar(urwid.WidgetWrap):
     def clear_message(self) -> None:
         self.set_message("")
 
-    # ------------------------------------------------------------------ #
-    #  Fitting
-    # ------------------------------------------------------------------ #
-
     def render(self, size: tuple, focus: bool = False):
         (maxcol,) = size
         if maxcol != self._last_maxcol:

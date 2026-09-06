@@ -1,12 +1,9 @@
-"""Unit tests for the typed search/run config model."""
-
 import json
 
 from rapmat.core.config import SearchConfig, merge_config_dicts
 
 
 def test_defaults_are_study_facing():
-    """Canonical defaults match the study-create form, not the old csp.py fallbacks."""
     cfg = SearchConfig()
     assert cfg.symprec == 1e-2
     assert cfg.force_conv_crit == 5e-3
@@ -22,7 +19,6 @@ def test_defaults_are_study_facing():
 
 
 def test_merge_precedence():
-    """Batch overrides study, study columns injected only when truthy."""
     study_cfg = {"symprec": 1e-3, "pressure_gpa": 5.0}
     batch_cfg = {"symprec": 1e-4, "formula": {"Al": 2, "O": 3}}
 
@@ -59,7 +55,6 @@ def test_from_stored_is_typed_merge():
 
 
 def test_roundtrip_old_style_dict_preserves_numbers():
-    """Stored numbers survive a json.loads -> model_validate round-trip verbatim."""
     old_config_json = json.dumps(
         {
             "formula": {"Al": 2, "O": 3},
@@ -80,7 +75,6 @@ def test_roundtrip_old_style_dict_preserves_numbers():
 
 
 def test_legacy_keys_ignored():
-    """Retired keys validate without error and don't appear in the model."""
     cfg = SearchConfig.model_validate(
         {"dedup": False, "dedup_threshold": 5.0, "symprec": 1e-3}
     )

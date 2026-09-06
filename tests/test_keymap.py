@@ -1,5 +1,3 @@
-"""Tests for the keymap."""
-
 import sys
 
 import pytest
@@ -26,11 +24,6 @@ def _binding(keys, label="X", priority=50, enabled=None, case_sensitive=False,
         priority=priority, case_sensitive=case_sensitive,
     )
     return b, fired
-
-
-# ---------------------------------------------------------------------------
-#  Dispatch
-# ---------------------------------------------------------------------------
 
 
 class TestDispatch:
@@ -68,11 +61,6 @@ class TestDispatch:
         assert fired == []
 
 
-# ---------------------------------------------------------------------------
-#  Footer derivation
-# ---------------------------------------------------------------------------
-
-
 class TestFooterHints:
     def test_priority_order_and_enabled_filter(self):
         b1, _ = _binding(("s",), label="Save", priority=20)
@@ -99,11 +87,6 @@ class TestFooterHints:
         assert footer_hints([b, f]) == [
             ("Del", "Remove", 50), ("F5", "Run", 50),
         ]
-
-
-# ---------------------------------------------------------------------------
-#  StatusBar width fitting
-# ---------------------------------------------------------------------------
 
 
 def _bar_text(bar: StatusBar, cols: int) -> str:
@@ -158,11 +141,6 @@ class TestStatusBarFitting:
         assert "[?] Help" in narrow
 
 
-# ---------------------------------------------------------------------------
-#  ScreenBase integration
-# ---------------------------------------------------------------------------
-
-
 def _make_app():
     from rapmat.storage.sqlite_store import SQLiteStore
     from rapmat.tui.app import RapmatApp
@@ -193,7 +171,7 @@ class TestScreenBaseFooter:
 
     def test_global_input_ignores_mouse_events(self):
         app, _state = _make_app()
-        app._global_input(("mouse press", 4, 10, 10))  # must not raise anything
+        app._global_input(("mouse press", 4, 10, 10))
 
 
 class _FakeRunningTask:
@@ -303,11 +281,6 @@ class TestScreenBaseDialogs:
         assert screen.body is base
 
 
-# ---------------------------------------------------------------------------
-#  Help overlay
-# ---------------------------------------------------------------------------
-
-
 class TestHelpOverlay:
     def test_question_mark_opens_and_esc_closes(self):
         from rapmat.tui.widgets.dialog import ModalDialog
@@ -336,11 +309,6 @@ class TestHelpOverlay:
         text = b"\n".join(canvas.text).decode()
         assert "New Run" in text or "Start a new CSP run" in text
         assert "This help" in text
-
-
-# ---------------------------------------------------------------------------
-#  Quit guard
-# ---------------------------------------------------------------------------
 
 
 class TestQuitGuard:

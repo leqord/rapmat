@@ -1,9 +1,3 @@
-"""Render smoke tests for every TUI screen.
-
-Each screen is built using in-memory db, rendered at two terminal sizes. Task-owning screens must
-cancel their background tasks in ``on_leave``.
-"""
-
 import sys
 
 import pytest
@@ -224,7 +218,6 @@ def test_on_leave_cancels_results_tasks(app_env, name):
 
 
 def test_eval_results_filter_recomputes_metrics(app_env):
-    """Hiding duplicates on the eval screen recomputes the metric."""
     state, app = app_env
     state.loop = None
     screen = _make_screen("eval_results", state, app._router)
@@ -242,8 +235,6 @@ def test_eval_results_filter_recomputes_metrics(app_env):
 
 
 class TestStudyListSearch:
-    """Search keys must flow through the widget tree to the focused edit."""
-
     _SIZE = (80, 24)
 
     @pytest.fixture
@@ -318,8 +309,6 @@ class TestStudyListSearch:
 
 
 class TestResultsDialogs:
-    """The results screen modal dialogs open, render and close on Esc."""
-
     _SIZE = (121, 38)
 
     @pytest.fixture

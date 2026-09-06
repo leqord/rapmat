@@ -1,6 +1,3 @@
-"""SQLAlchemy 2.0 declarative models.
-"""
-
 from __future__ import annotations
 
 from typing import Optional
@@ -27,8 +24,6 @@ class Base(DeclarativeBase):
 
 
 class Study(Base):
-    """A search space definition."""
-
     __tablename__ = "study"
 
     study_id: Mapped[str] = mapped_column("id", Text, primary_key=True)
@@ -56,7 +51,6 @@ class Study(Base):
         )
 
     def to_dict(self) -> dict:
-        """Plain dict representation."""
         return {
             "study_id": self.study_id,
             "system": self.system,
@@ -68,8 +62,6 @@ class Study(Base):
 
 
 class Run(Base):
-    """A run row."""
-
     __tablename__ = "run"
 
     name: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -86,8 +78,6 @@ class Run(Base):
 
 
 class Structure(Base):
-    """A stored structure."""
-
     __tablename__ = "structure"
     __table_args__ = (
         Index("idx_struct_run", "run"),
@@ -135,8 +125,6 @@ class Structure(Base):
         for k, v in transient.items():
             setattr(self, k, v)
 
-    # Computed properties
-
     @property
     def atoms(self) -> Atoms | None:
         return self.final_atoms if self.final_atoms is not None else self.initial_atoms
@@ -178,7 +166,6 @@ class Structure(Base):
 
     @property
     def forces(self):
-        """Per-atom forces, smuggled through ``atoms.info`` by the CSP loop."""
         atoms = self.atoms
         return atoms.info.get("forces") if atoms is not None else None
 
@@ -192,8 +179,6 @@ class Structure(Base):
 
 
 class Evaluation(Base):
-    """Evaluation of a structure."""
-
     __tablename__ = "evaluation"
     __table_args__ = (
         Index("idx_eval_run", "run"),
@@ -216,8 +201,6 @@ class Evaluation(Base):
 
 
 class Phonon(Base):
-    """A structure's related phonon row."""
-
     __tablename__ = "phonon"
     __table_args__ = (Index("idx_phonon_run", "run"),)
 
@@ -238,8 +221,6 @@ class Phonon(Base):
 
 
 class PhononParams(Base):
-    """gzip-b64 phonopy blob"""
-
     __tablename__ = "phonon_params"
     __table_args__ = (Index("idx_phonon_params_run", "run"),)
 

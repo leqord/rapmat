@@ -1,5 +1,3 @@
-"""Tests for phonon dynamical stability."""
-
 import numpy as np
 from ase.build import bulk
 
@@ -9,8 +7,6 @@ from rapmat.core.entities import ResultRow, Structure
 
 
 def test_serialize_deserialize_phonons_roundtrip():
-    """The force-sets blob reproduces force constants on load.
-    """
     import base64
     import gzip
 

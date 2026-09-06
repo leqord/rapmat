@@ -1,6 +1,3 @@
-"""Shared (de)serialization helpers for storage backends.
-"""
-
 _decode = None
 _encode = None
 

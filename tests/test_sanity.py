@@ -1,5 +1,3 @@
-"""Tests for physical sanity checks on relaxed structures."""
-
 import importlib.util
 
 import pytest

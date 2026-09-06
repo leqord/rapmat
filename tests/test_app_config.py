@@ -1,5 +1,3 @@
-"""Tests for local application settings."""
-
 from pathlib import Path
 
 import pytest
@@ -100,7 +98,6 @@ class TestCalcRoot:
 
 class TestIsolation:
     def test_the_real_config_dir_is_never_used(self):
-        """Regression"""
         from rapmat import config as rapmat_config
 
         assert app_config.APP_CONFIG_DIR != rapmat_config.APP_CONFIG_DIR

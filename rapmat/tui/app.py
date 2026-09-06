@@ -13,10 +13,6 @@ from rapmat.tui.theme import PALETTE, apply_color_depth
 from rapmat.tui.widgets.status_bar import StatusBar
 from rapmat.utils import hardware
 
-# ------------------------------------------------------------------ #
-#  Application
-# ------------------------------------------------------------------ #
-
 
 class RapmatApp:
     def __init__(
@@ -68,10 +64,6 @@ class RapmatApp:
 
         self._router.push(HomeScreen(self._state, self._router))
 
-    # ------------------------------------------------------------------ #
-    #  Public API
-    # ------------------------------------------------------------------ #
-
     def run(self) -> None:
         if self._startup_error is not None:
             self._loop.set_alarm_in(0, self._show_startup_error)
@@ -85,7 +77,6 @@ class RapmatApp:
                 pass
 
     def _start_hw_detection(self) -> None:
-        """Detect torch device on a separate thread."""
         threading.Thread(target=hardware.detect, daemon=True).start()
         self._loop.set_alarm_in(0.1, self._poll_hw_status)
 
@@ -138,10 +129,6 @@ class RapmatApp:
         )
         self._frame.body = dlg
 
-    # ------------------------------------------------------------------ #
-    #  Input handling
-    # ------------------------------------------------------------------ #
-
     def _global_input(self, key) -> None:
         from rapmat.tui.widgets.dialog import ModalDialog
 
@@ -149,7 +136,6 @@ class RapmatApp:
             return
         
         if isinstance(self._frame.body, ModalDialog):
-            # App-level dialog is open and it has its own keys
             return
         current = self._router.current
         if current is not None:

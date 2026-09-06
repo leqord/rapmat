@@ -49,10 +49,6 @@ class StudyDetailScreen(ScreenBase):
         self._details_content: urwid.WidgetPlaceholder | None = None
         self._details_panel: urwid.Widget | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._placeholder = urwid.WidgetPlaceholder(self._build_widget())
         return self._placeholder
@@ -92,10 +88,6 @@ class StudyDetailScreen(ScreenBase):
 
     def extra_hints(self) -> list:
         return [("Enter", "Open Run", 5)]
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _build_widget(self) -> urwid.Widget:
         study_id = self._state.active_study or ""
@@ -212,10 +204,6 @@ class StudyDetailScreen(ScreenBase):
             self._on_run_focus_change(self._table.get_focused_row())
         self.refresh_footer()
         return urwid.Padding(body, left=1, right=1)
-
-    # ------------------------------------------------------------------ #
-    #  Callbacks
-    # ------------------------------------------------------------------ #
 
     def _on_run_focus_change(self, run: dict | None) -> None:
         if getattr(self, "_details_content", None) is None:

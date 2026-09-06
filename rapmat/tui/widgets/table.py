@@ -93,10 +93,6 @@ class SortableTable(urwid.WidgetWrap):
 
         self.set_data(row_data)
 
-    # ------------------------------------------------------------------ #
-    #  Public API
-    # ------------------------------------------------------------------ #
-
     def set_data(self, rows: list[dict]) -> None:
         self._data = list(rows)
         self._rebuild_walker()
@@ -144,10 +140,6 @@ class SortableTable(urwid.WidgetWrap):
 
         self._data.sort(key=_key, reverse=reverse)
         self._rebuild_walker()
-
-    # ------------------------------------------------------------------ #
-    #  Internal helpers
-    # ------------------------------------------------------------------ #
 
     def _rebuild_walker(self) -> None:
         widths = [w for _, w in self._columns]

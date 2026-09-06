@@ -1,7 +1,8 @@
 from typing import List, Optional, Tuple
 
 from rapmat.calculators import Calculators, ProgressCalcCallback
-from rapmat.calculators.factory import CalculatorProvider
+from rapmat.calculators.factory import (CalculatorProvider, finalize_provider,
+                                        set_provider_label)
 from rapmat.core.entities import ResultRow
 from rapmat.core.phonon import calculate_phonons_with_freq, serialize_phonons
 from rapmat.storage.base import StructureStore
@@ -44,7 +45,7 @@ def compute_dynamical_stability_for_results(
     if not target_results:
         return False
 
-    with workdir_context(None) as wdir:
+    with workdir_context(None, session_hint=run_name) as wdir:
         updated = False
         total = len(target_results)
 
@@ -109,6 +110,8 @@ def compute_dynamical_stability_for_results(
                 result.dynamical_stability = None
                 return
 
+            set_provider_label(calculator_for, result.structure_id)
+
             try:
                 phonons, min_freq = calculate_phonons_with_freq(
                     atoms,
@@ -135,12 +138,15 @@ def compute_dynamical_stability_for_results(
                 result.dynamical_stability = None
                 updated = True
 
-        for i, result in enumerate(target_results):
-            _bar["current"] = i
-            msg = f"Structure {i + 1}/{total}: {result.formula}"
-            if progress_callback is not None:
-                progress_callback(i, total, msg)
-            _process_one(result)
+        try:
+            for i, result in enumerate(target_results):
+                _bar["current"] = i
+                msg = f"Structure {i + 1}/{total}: {result.formula}"
+                if progress_callback is not None:
+                    progress_callback(i, total, msg)
+                _process_one(result)
+        finally:
+            finalize_provider(calculator_for)
 
         if progress_callback is not None:
             progress_callback(total, total, "Done")

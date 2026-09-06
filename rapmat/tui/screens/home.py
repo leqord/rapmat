@@ -90,6 +90,10 @@ class HomeScreen(ScreenBase):
                 help="Database settings", priority=40,
             ),
             KeyBinding(
+                ("c",), "Calc", self._go_calc_settings,
+                help="Calculation directory settings", priority=45,
+            ),
+            KeyBinding(
                 ("i",), "Status", self._go_status,
                 help="Locks and app status", priority=50,
             ),
@@ -125,6 +129,7 @@ class HomeScreen(ScreenBase):
                 _btn("[P] Phonon", self._go_phonon),
                 *_section("Settings"),
                 _btn("[D] DB Settings", self._go_db_settings),
+                _btn("[C] Calc Settings", self._go_calc_settings),
                 _btn("[I] Status", self._go_status),
                 urwid.Divider("-"),
                 _btn("[Q] Quit", self._do_quit),
@@ -233,6 +238,11 @@ class HomeScreen(ScreenBase):
         from rapmat.tui.screens.db_settings import DbSettingsScreen
 
         self._router.push(DbSettingsScreen(self._state, self._router))
+
+    def _go_calc_settings(self, _btn: urwid.Button | None = None) -> None:
+        from rapmat.tui.screens.calc_settings import CalcSettingsScreen
+
+        self._router.push(CalcSettingsScreen(self._state, self._router))
 
     def _go_status(self, _btn: urwid.Button | None = None) -> None:
         from rapmat.tui.screens.status import StatusScreen

@@ -66,6 +66,8 @@ def run_eval_loop(
     symprec: float = 1e-3,
 ) -> None:
     from rapmat.calculators import cleanup_calculator_files
+    from rapmat.calculators.factory import (finalize_provider,
+                                            set_provider_label)
     from rapmat.calculators.vasp import preflight_potcars
     from rapmat.core.phonon import calculate_min_phonon_freq
     from rapmat.utils.console import get_logger
@@ -79,6 +81,7 @@ def run_eval_loop(
         atoms = rec.atoms.copy()
         atoms.pbc = True
         calculator = None
+        set_provider_label(calculator_for, rec.id)
 
         try:
             calculator = calculator_for(atoms)
@@ -140,6 +143,8 @@ def run_eval_loop(
 
         if progress_callback:
             progress_callback(i, n_total, f"Evaluated {i}/{n_total}")
+
+    finalize_provider(calculator_for)
 
 
 # ------------------------------------------------------------------ #

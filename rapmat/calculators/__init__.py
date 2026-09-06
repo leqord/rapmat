@@ -131,30 +131,36 @@ def ensure_asset(
     _notify(callback, f"{name} installed successfully.")
 
 
-def cleanup_calculator_files(calculator) -> None:
-    calc_name = getattr(calculator, "name", "").lower()
+_STALE_VASP_FILES = (
+    "WAVECAR",
+    "WAVECAR.h5",
+    "CHGCAR",
+    "CHG",
+    "vasprun.xml",
+    "OUTCAR",
+    "OSZICAR",
+    "EIGENVAL",
+    "DOSCAR",
+    "PROCAR",
+    "IBZKPT",
+    "PCDAT",
+    "XDATCAR",
+    "CONTCAR",
+)
 
-    if calc_name == "vasp" and hasattr(calculator, "directory"):
-        for fname in [
-            "WAVECAR",
-            "WAVECAR.h5",
-            "CHGCAR",
-            "CHG",
-            "vasprun.xml",
-            "OUTCAR",
-            "OSZICAR",
-            "EIGENVAL",
-            "DOSCAR",
-            "PROCAR",
-            "IBZKPT",
-            "PCDAT",
-            "XDATCAR",
-            "CONTCAR",
-            "vasp*.lock",
-        ]:
-            fpath = Path(calculator.directory) / fname
-            if fpath.exists():
-                try:
-                    fpath.unlink()
-                except OSError:
-                    pass
+
+def cleanup_calculator_files(calculator) -> None:
+    from rapmat.calculators.calc_dirs import unlink_quietly
+
+    calc_name = getattr(calculator, "name", "").lower()
+    if calc_name != "vasp" or not hasattr(calculator, "directory"):
+        return
+
+    dirpath = Path(calculator.directory)
+    if not dirpath.is_dir():
+        return
+
+    for fname in _STALE_VASP_FILES:
+        unlink_quietly(dirpath / fname)
+    for lock in dirpath.glob("vasp*.lock"):
+        unlink_quietly(lock)

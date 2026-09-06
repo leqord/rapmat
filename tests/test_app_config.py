@@ -1,5 +1,7 @@
 """Tests for local application settings."""
 
+from pathlib import Path
+
 import pytest
 
 from rapmat import app_config
@@ -55,6 +57,45 @@ class TestPersistVaspCommand:
         )
         app_config.persist_vasp_command("vasp_std")
         assert app_config.load_app_settings()["other"]["keep"] == "me"
+
+
+class TestCalcRoot:
+    def test_unset_by_default(self):
+        assert app_config.resolve_calc_root() == ""
+        assert app_config.calc_root_path() is None
+
+    def test_round_trips(self, tmp_path):
+        target = str(tmp_path / "calcs")
+        assert app_config.persist_calc_root(target) is True
+        assert app_config.resolve_calc_root() == target
+        assert app_config.calc_root_path() == Path(target)
+
+    def test_reports_no_change_when_identical(self, tmp_path):
+        app_config.persist_calc_root(str(tmp_path))
+        assert app_config.persist_calc_root(str(tmp_path)) is False
+
+    def test_blank_clears_back_to_temp(self, tmp_path):
+        app_config.persist_calc_root(str(tmp_path))
+        assert app_config.persist_calc_root("") is True
+        assert app_config.calc_root_path() is None
+
+    def test_clearing_an_unset_root_is_a_no_op(self):
+        assert app_config.persist_calc_root("   ") is False
+
+    def test_whitespace_only_is_unset(self):
+        app_config.persist_calc_root("   ")
+        assert app_config.calc_root_path() is None
+
+    def test_does_not_clobber_the_vasp_command(self, tmp_path):
+        app_config.persist_vasp_command("vasp_std")
+        app_config.persist_calc_root(str(tmp_path))
+        assert app_config.resolve_vasp_command() == "vasp_std"
+
+    def test_clearing_does_not_clobber_the_vasp_command(self, tmp_path):
+        app_config.persist_vasp_command("vasp_std")
+        app_config.persist_calc_root(str(tmp_path))
+        app_config.persist_calc_root("")
+        assert app_config.resolve_vasp_command() == "vasp_std"
 
 
 class TestIsolation:

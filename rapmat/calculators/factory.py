@@ -2,6 +2,7 @@ from pathlib import Path
 
 from rapmat.calculators import (CalculatorCallback, Calculators,
                                 get_install_hint, is_calculator_available)
+from rapmat.calculators.calc_dirs import CalcDirAllocator
 
 
 class CalculatorProvider:
@@ -26,6 +27,18 @@ class CalculatorProvider:
         self._cached = None
         self._potcar_version = None
 
+        # NOTE: Only VASP writes to disk
+        self._dirs = CalcDirAllocator(
+            output_dir_path if self._name is Calculators.VASP else None
+        )
+
+        if self._dirs.active and self._config.pop("directory", None) is not None:
+            if log_callback:
+                log_callback(
+                    "Ignoring 'directory' from the calculator config: "
+                    "one directory per calculation."
+                )
+
         if self._auto:
             from rapmat.calculators.vasp_auto import resolve_potcar_version
 
@@ -37,10 +50,24 @@ class CalculatorProvider:
     def auto(self) -> bool:
         return self._auto
 
+    @property
+    def scope_path(self) -> Path | None:
+        return self._dirs.scope_path
+
+    def set_calc_label(self, label) -> None:
+        self._dirs.set_label(label)
+
+    def finalize(self) -> None:
+        self._dirs.finalize()
+
     def __call__(self, atoms):
+        directory = self._dirs.next()
+
         if not self._auto:
             if self._cached is None:
-                self._cached = self._build(self._config)
+                self._cached = self._build(self._config, directory)
+            elif directory is not None:
+                self._cached.directory = str(directory)
             return self._cached
 
         from rapmat.calculators.vasp_auto import (describe_params,
@@ -55,18 +82,30 @@ class CalculatorProvider:
             self._log_callback(
                 f"{atoms.get_chemical_formula()}: {describe_params(params)}"
             )
-        return self._build({**self._config, **params})
+        return self._build({**self._config, **params}, directory)
 
     def reset(self) -> None:
         self._cached = None
 
-    def _build(self, config: dict):
+    def _build(self, config: dict, directory: Path | None = None):
         return load_calculator(
             self._name,
-            self._output_dir_path,
+            directory if directory is not None else self._output_dir_path,
             config=config,
             callback=self._callback,
         )
+
+
+def set_provider_label(calculator_for, label) -> None:
+    setter = getattr(calculator_for, "set_calc_label", None)
+    if callable(setter):
+        setter(label)
+
+
+def finalize_provider(calculator_for) -> None:
+    finalizer = getattr(calculator_for, "finalize", None)
+    if callable(finalizer):
+        finalizer()
 
 
 def load_calculator(

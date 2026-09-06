@@ -570,7 +570,7 @@ class EvalScreen(ScreenBase):
         progress.log(f"{len(records)} structures, {len(pending)} to evaluate")
 
         if pending:
-            with workdir_context(None) as wdir:
+            with workdir_context(None, session_hint=run_name) as wdir:
                 progress.log(f"Working directory: {wdir}")
                 calculator_for = CalculatorProvider(
                     Calculators(calculator_name),

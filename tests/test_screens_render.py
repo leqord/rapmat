@@ -98,6 +98,10 @@ def _make_screen(name: str, state, router):
         from rapmat.tui.screens.db_settings import DbSettingsScreen
 
         return DbSettingsScreen(state, router)
+    if name == "calc_settings":
+        from rapmat.tui.screens.calc_settings import CalcSettingsScreen
+
+        return CalcSettingsScreen(state, router)
     if name == "csp_search":
         from rapmat.tui.screens.csp_search import CSPSearchScreen
 
@@ -151,6 +155,7 @@ _ALL_SCREENS = [
     "study_create",
     "study_detail",
     "db_settings",
+    "calc_settings",
     "csp_search",
     "csp_resume",
     "phonon",

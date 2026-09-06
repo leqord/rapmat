@@ -1,5 +1,6 @@
 """Tests for CalculatorProvider."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -111,6 +112,93 @@ class TestAutoSettings:
     def test_returns_a_usable_vasp_calculator(self):
         provider = CalculatorProvider(Calculators.VASP, auto_settings=True)
         assert isinstance(provider(bulk("Si", "diamond", a=5.43)), Vasp)
+
+
+# ------------------------------------------------------------------ #
+#  Per-calculation directories
+# ------------------------------------------------------------------ #
+
+
+class TestPerCallDirectories:
+    def test_each_call_gets_its_own_directory(self, tmp_path):
+        provider = CalculatorProvider(Calculators.VASP, tmp_path)
+        atoms = bulk("Si", "diamond", a=5.43)
+
+        first = provider(atoms).directory
+        second = provider(atoms).directory
+
+        assert first != second
+
+    def test_the_instance_is_still_shared(self, tmp_path):
+        provider = CalculatorProvider(Calculators.VASP, tmp_path)
+        atoms = bulk("Si", "diamond", a=5.43)
+
+        assert provider(atoms) is provider(atoms)
+
+    def test_label_becomes_nested_directories(self, tmp_path):
+        provider = CalculatorProvider(Calculators.VASP, tmp_path)
+        provider.set_calc_label("r/1")
+
+        calc = provider(bulk("Si", "diamond", a=5.43))
+
+        assert Path(calc.directory) == tmp_path / "r" / "1" / "0001"
+
+    def test_displacements_stay_under_the_labelled_structure(self, tmp_path):
+        provider = CalculatorProvider(Calculators.VASP, tmp_path)
+        provider.set_calc_label("r/1")
+        atoms = bulk("Si", "diamond", a=5.43)
+
+        provider(atoms)
+        second = Path(provider(atoms).directory)
+
+        assert second == tmp_path / "r" / "1" / "0002"
+
+    def test_auto_mode_also_gets_per_call_directories(self, tmp_path):
+        provider = CalculatorProvider(
+            Calculators.VASP, tmp_path, auto_settings=True
+        )
+        atoms = bulk("Si", "diamond", a=5.43)
+
+        assert provider(atoms).directory != provider(atoms).directory
+
+    def test_config_directory_is_ignored(self, tmp_path):
+        provider = CalculatorProvider(
+            Calculators.VASP, tmp_path, config={"directory": str(tmp_path / "fixed")}
+        )
+        calc = provider(bulk("Si", "diamond", a=5.43))
+
+        assert Path(calc.directory) == tmp_path / "0001"
+
+    def test_config_directory_survives_without_a_root(self):
+        provider = CalculatorProvider(
+            Calculators.VASP, config={"directory": "somewhere"}
+        )
+        assert provider(bulk("Si", "diamond", a=5.43)).directory == "somewhere"
+
+    def test_nothing_is_written_until_the_calculation_runs(self, tmp_path):
+        root = tmp_path / "calc"
+        provider = CalculatorProvider(Calculators.VASP, root)
+        provider.set_calc_label("r/1")
+        provider(bulk("Si", "diamond", a=5.43))
+
+        assert not root.exists()
+
+    def test_mlips_never_touch_the_filesystem(self, tmp_path):
+        root = tmp_path / "calc"
+        with patch("rapmat.calculators.factory.load_calculator") as loader:
+            provider = CalculatorProvider(Calculators.MATTERSIM, root)
+            provider.set_calc_label("r/1")
+            provider(bulk("Si", "diamond", a=5.43))
+
+        assert not root.exists()
+        assert loader.call_args.args[1] is root
+
+    def test_shims_tolerate_a_plain_callable(self):
+        from rapmat.calculators.factory import (finalize_provider,
+                                                set_provider_label)
+
+        set_provider_label(lambda atoms: None, "r/1")
+        finalize_provider(lambda atoms: None)
 
 
 # ------------------------------------------------------------------ #

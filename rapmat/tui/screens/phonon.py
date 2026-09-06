@@ -205,7 +205,9 @@ class PhononDispersionScreen(ScreenBase):
         if not isinstance(structure, Atoms):
             structure = structure[-1]
 
-        with workdir_context(None) as wdir:
+        label = Path(structure_file).stem
+
+        with workdir_context(None, session_hint=label) as wdir:
             progress.log(f"Working directory: {wdir}")
             progress.update(1, 5, "Loading calculator")
             progress.log(f"Loading calculator {calculator_name}...")
@@ -218,6 +220,7 @@ class PhononDispersionScreen(ScreenBase):
                 monolayer=vals.get("domain") == "monolayer",
                 log_callback=progress.log,
             )
+            calculator_for.set_calc_label(label)
             structure.calc = calculator_for(structure)
 
             if prerelax:

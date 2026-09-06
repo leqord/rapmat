@@ -26,7 +26,9 @@ def run_processing_loop(
     from ase.units import GPa as _GPa
 
     from rapmat.calculators import Calculators, ProgressCalcCallback
-    from rapmat.calculators.factory import CalculatorProvider
+    from rapmat.calculators.factory import (CalculatorProvider,
+                                            finalize_provider,
+                                            set_provider_label)
     from rapmat.core.config import SearchConfig
     from rapmat.core.relaxation import structure_relax
     from rapmat.core.sanity import check_sanity
@@ -70,6 +72,16 @@ def run_processing_loop(
         if progress_callback:
             progress_callback(counter, n_candidates, msg)
 
+    def _opt_logfile(struct_id: str) -> str:
+        scope = calculator_for.scope_path
+        if scope is None:
+            return str(
+                calculator_workdir_path
+                / Path(f"opt_{struct_id.replace('/', '_')}.log")
+            )
+        scope.mkdir(parents=True, exist_ok=True)
+        return str(scope / "opt.log")
+
     _calc_cb.on_status(f"Loading calculator {calculator_name}...")
     calculator_for = CalculatorProvider(
         Calculators(calculator_name),
@@ -93,6 +105,7 @@ def run_processing_loop(
             if worker_id and counter % 10 == 0:
                 store.update_heartbeat(run_name, worker_id)
             struct_id = candidate.id
+            set_provider_label(calculator_for, struct_id)
 
             for attempt in range(3):
                 structure = candidate.atoms.copy()
@@ -124,10 +137,7 @@ def run_processing_loop(
                         force_conv_crit=force_conv_crit,
                         steps_max=steps_max,
                         mask=[1, 1, 0, 0, 0, 1] if domain_val == "monolayer" else None,
-                        opt_logfile=str(
-                            calculator_workdir_path
-                            / Path(f"opt_{struct_id.replace('/', '_')}.log")
-                        ),
+                        opt_logfile=_opt_logfile(struct_id),
                         scalar_pressure=pressure_evA3,
                         forces_break=forces_break,
                         cancel_flag=cancel_flag,
@@ -235,7 +245,10 @@ def run_processing_loop(
                     counter, n_candidates, f"Processed {counter}/{n_candidates}"
                 )
 
-    _run_loop()
+    try:
+        _run_loop()
+    finally:
+        finalize_provider(calculator_for)
 
     pressure_msg = f" | Pressure: {pressure_gpa} GPa" if pressure_gpa > 0 else ""
     logger.info(
@@ -427,8 +440,11 @@ def execute_run(
             raise
 
     try:
-        with workdir_context(None) as workdir_path:
-            _log(f"Working directory: {workdir_path}")
+        with workdir_context(None, session_hint=worker_id) as workdir_path:
+            from rapmat.app_config import calc_root_path
+
+            kept = "kept" if calc_root_path() else "temporary"
+            _log(f"Working directory ({kept}): {workdir_path}")
 
             pending = store.get_pending_generation(run_name)
             if pending:

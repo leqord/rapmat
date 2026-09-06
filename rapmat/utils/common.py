@@ -56,12 +56,34 @@ def free_cuda_memory() -> None:
         pass
 
 
+def _session_dirname(hint: str | None) -> str:
+    import os
+    from datetime import datetime
+    from uuid import uuid4
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return f"{stamp}-{hint or os.getpid()}-{uuid4().hex[:6]}"
+
+
 @contextmanager
-def workdir_context(workdir: str | None) -> Generator[Path, None, None]:
-    if workdir is None:
-        with tempfile.TemporaryDirectory(suffix=APP_TMPDIR_SUFFIX) as td:
-            yield Path(td)
-    else:
+def workdir_context(
+    workdir: str | None, *, session_hint: str | None = None
+) -> Generator[Path, None, None]:
+    if workdir is not None:
         path = Path(workdir)
         path.mkdir(parents=True, exist_ok=True)
         yield path.resolve()
+        return
+
+    from rapmat.app_config import calc_root_path
+
+    root = calc_root_path()
+    if root is None:
+        with tempfile.TemporaryDirectory(suffix=APP_TMPDIR_SUFFIX) as td:
+            yield Path(td)
+        return
+
+    # NOTE: session directory
+    session = root / _session_dirname(session_hint)
+    session.mkdir(parents=True, exist_ok=True)
+    yield session.resolve()

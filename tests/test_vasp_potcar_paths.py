@@ -34,6 +34,29 @@ def si():
     return bulk("Si", "diamond", a=5.43)
 
 
+class TestWriteInputCreatesTheDirectory:
+
+    def test_missing_directory_is_created(self, pp_tree, si, tmp_path):
+        from rapmat.calculators.vasp import build_calculator_vasp
+
+        pp_tree("potpaw_PBE")
+        target = tmp_path / "calc" / "r" / "1" / "0001"
+        calc = build_calculator_vasp({"xc": "PBE"}, directory=target)
+
+        calc.write_input(si)
+
+        assert (target / "INCAR").is_file()
+        assert (target / "POSCAR").is_file()
+
+    def test_ase_alone_would_have_failed(self, pp_tree, si, tmp_path):
+        pp_tree("potpaw_PBE")
+        target = tmp_path / "missing"
+        calc = Vasp(xc="PBE", directory=str(target))
+
+        with pytest.raises(FileNotFoundError):
+            calc.write_input(si)
+
+
 class TestPotcarResolution:
     def test_auto_needs_the_versioned_pbe_directory(self, pp_tree, si):
         pp_tree("potpaw_PBE.54")

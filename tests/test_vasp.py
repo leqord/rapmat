@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from ase.calculators.vasp import Vasp
 
-from rapmat.calculators import Calculators
+from rapmat.calculators import Calculators, cleanup_calculator_files
 from rapmat.calculators.factory import load_calculator
 from rapmat.calculators.vasp import build_calculator_vasp
 
@@ -89,6 +89,58 @@ class TestBuildCalculatorVasp:
         config = {"encut": 500}
         build_calculator_vasp(config, directory=Path("/tmp/x"))
         assert "directory" not in config
+
+
+class TestVaspTxt:
+    def test_txt_is_relative_to_the_directory(self, tmp_path):
+        calc = build_calculator_vasp({}, directory=tmp_path)
+        assert calc.txt == "vasp.out"
+
+    def test_explicit_txt_is_preserved(self, tmp_path):
+        calc = build_calculator_vasp({"txt": "-"}, directory=tmp_path)
+        assert calc.txt == "-"
+
+
+class TestCleanupCalculatorFiles:
+    def test_lock_files_are_removed(self, tmp_path):
+        calc = build_calculator_vasp({}, directory=tmp_path)
+        (tmp_path / "vasp1.lock").write_text("x", encoding="utf-8")
+
+        cleanup_calculator_files(calc)
+
+        assert not (tmp_path / "vasp1.lock").exists()
+
+    def test_stale_results_are_removed(self, tmp_path):
+        calc = build_calculator_vasp({}, directory=tmp_path)
+        for name in ("OUTCAR", "vasprun.xml", "CONTCAR"):
+            (tmp_path / name).write_text("x", encoding="utf-8")
+
+        cleanup_calculator_files(calc)
+
+        assert not any((tmp_path / n).exists() for n in ("OUTCAR", "CONTCAR"))
+
+    def test_inputs_are_left_alone(self, tmp_path):
+        calc = build_calculator_vasp({}, directory=tmp_path)
+        for name in ("INCAR", "POSCAR", "KPOINTS"):
+            (tmp_path / name).write_text("x", encoding="utf-8")
+
+        cleanup_calculator_files(calc)
+
+        assert all((tmp_path / n).exists() for n in ("INCAR", "POSCAR", "KPOINTS"))
+
+    def test_missing_directory_does_not_raise(self, tmp_path):
+        cleanup_calculator_files(build_calculator_vasp({}, directory=tmp_path / "nope"))
+
+    def test_non_vasp_calculator_is_ignored(self, tmp_path):
+        from ase.calculators.emt import EMT
+
+        (tmp_path / "OUTCAR").write_text("x", encoding="utf-8")
+        calc = EMT()
+        calc.directory = str(tmp_path)
+
+        cleanup_calculator_files(calc)
+
+        assert (tmp_path / "OUTCAR").exists()
 
 
 class TestFactoryVasp:

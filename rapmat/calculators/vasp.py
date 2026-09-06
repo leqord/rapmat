@@ -3,6 +3,13 @@ from pathlib import Path
 from ase.calculators.vasp import Vasp
 
 
+class RapmatVasp(Vasp):
+
+    def write_input(self, atoms, properties=None, system_changes=None):
+        Path(self.directory).mkdir(parents=True, exist_ok=True)
+        super().write_input(atoms, properties, system_changes)
+
+
 def preflight_potcars(calculator, atoms) -> None:
     if not isinstance(calculator, Vasp):
         return
@@ -25,8 +32,7 @@ def build_calculator_vasp(config: dict, directory: Path | None = None) -> Vasp:
     if directory is not None and "directory" not in kwargs:
         kwargs["directory"] = str(directory)
 
-    if "txt" not in kwargs:
-        workdir = kwargs.get("directory", ".")
-        kwargs["txt"] = str(Path(workdir) / "vasp.out")
+    # NOTE: important
+    kwargs.setdefault("txt", "vasp.out")
 
-    return Vasp(**kwargs)
+    return RapmatVasp(**kwargs)

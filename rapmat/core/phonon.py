@@ -49,8 +49,7 @@ def structure_calculate_phonons(
                 0, 0, f"Processing deformed structure {counter}/{len(supercells)}"
             )
 
-        cleanup_calculator_files(atoms.calc)
-
+        # NOTE: no cleanup here
         ase_cell = Atoms(
             symbols=phonopy_cell.symbols,
             positions=phonopy_cell.positions,

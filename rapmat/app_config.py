@@ -49,5 +49,34 @@ def persist_vasp_command(command: str) -> bool:
     return True
 
 
+def resolve_calc_root() -> str:
+    return str(load_app_settings().get("calc", {}).get("work_root", "")).strip()
+
+
+def calc_root_path() -> Path | None:
+    root = resolve_calc_root()
+    return Path(root).expanduser() if root else None
+
+
+def persist_calc_root(path: str) -> bool:
+    path = path.strip()
+    settings = load_app_settings()
+    current = str(settings.get("calc", {}).get("work_root", "")).strip()
+    if path == current:
+        return False
+
+    calc = settings.setdefault("calc", {})
+    if path:
+        calc["work_root"] = path
+    else:
+        calc.pop("work_root", None)
+        if not calc:
+            settings.pop("calc", None)
+
+    APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    _SETTINGS_FILE.write_text(tomli_w.dumps(settings), encoding="utf-8")
+    return True
+
+
 def settings_file_path() -> Path:
     return _SETTINGS_FILE

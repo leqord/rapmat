@@ -57,9 +57,6 @@ class DedupSimulationResult:
     dropped_ids: list[str] = field(default_factory=list)
 
 
-# --------------------------------------------------------------------------- #
-#  Shared pipeline defaults
-# --------------------------------------------------------------------------- #
 DEFAULT_SOAP_R_CUT = 6.0
 DEFAULT_SOAP_N_MAX = 8
 DEFAULT_SOAP_L_MAX = 6
@@ -99,7 +96,7 @@ DEFAULT_METRIC = "cosine"
 
 
 class DedupAnalysisError(Exception):
-    """A run cannot be analysed."""
+    pass
 
 
 def compute_pairwise_distances(
@@ -403,7 +400,6 @@ class DedupAnalysis:
         )
 
     def to_result_dict(self) -> dict:
-        """For the TUI dedup screen."""
         return {
             "n_structs": self.n_structs,
             "n_pairs": self.n_pairs,

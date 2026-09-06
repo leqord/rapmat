@@ -1,15 +1,9 @@
-"""TUI test suite: widgets, screens, router, tasks, and state."""
-
 import threading
 import time
 from unittest.mock import MagicMock
 
 import pytest
 import urwid
-
-# ---------------------------------------------------------------------------
-#  Widget unit tests
-# ---------------------------------------------------------------------------
 
 
 class TestSortableTable:
@@ -332,7 +326,6 @@ class TestModalDialog:
 
         parent = urwid.SolidFill("x")
         dlg = ModalDialog.input_text("T", "msg", parent, on_save=lambda s: None)
-        # Printable keys must reach the inner Edit, not be swallowed
         assert dlg.keypress((80, 24), "a") is None
 
 
@@ -387,14 +380,7 @@ class TestStatusBar:
         bar.clear_message()
 
 
-# ---------------------------------------------------------------------------
-#  Router tests
-# ---------------------------------------------------------------------------
-
-
 class _DummyScreen:
-    """Minimal Screen implementation for router tests."""
-
     def __init__(self, name: str, bc_title: str | None = None):
         self.title = name
         self._bc_title = bc_title
@@ -483,11 +469,6 @@ class TestScreenRouter:
         router.pop()
         assert frame.body is original_widget
         assert s1.resume_count == 1
-
-
-# ---------------------------------------------------------------------------
-#  TaskProgress / BackgroundTask tests
-# ---------------------------------------------------------------------------
 
 
 class TestTaskProgress:
@@ -629,11 +610,6 @@ class TestBackgroundTask:
         assert task._progress.cancelled
 
 
-# ---------------------------------------------------------------------------
-#  AppState tests
-# ---------------------------------------------------------------------------
-
-
 class TestAppState:
     def _make_state(self):
         from rapmat.tui.state import AppState
@@ -687,14 +663,7 @@ class TestAppState:
         assert len(state.studies_cache) == 1
 
 
-# ---------------------------------------------------------------------------
-#  Screen build smoke tests
-# ---------------------------------------------------------------------------
-
-
 class TestScreenBuildSmoke:
-    """Verify each screen can call build() without crashing."""
-
     def _make_env(self, tmp_path):
         from rapmat.tui.state import AppState
 
@@ -820,11 +789,6 @@ class TestScreenBuildSmoke:
         assert isinstance(w, urwid.Widget)
 
     def _make_mem_env(self):
-        """Real in-memory store env for screens whose build() hits the store.
-
-        loop stays None so BaseResultsScreen.build() takes the synchronous
-        fallback and the frame is fully built on return.
-        """
         from rapmat.storage import SQLiteStore
         from rapmat.tui.router import ScreenRouter
         from rapmat.tui.state import AppState
@@ -848,9 +812,6 @@ class TestScreenBuildSmoke:
         assert s._main_frame is not None
 
     def test_results_zero_thickness_is_shown(self):
-        """A perfectly flat monolayer has thickness exactly 0.0, it must be kept
-        and rendered as "0.00".
-        """
         from ase import Atoms
         from conftest import add_relaxed_structure
 
@@ -880,8 +841,6 @@ class TestScreenBuildSmoke:
         assert "0.00" in s._format_row(s._results[0])
 
     def test_apply_to_db_paints_modal_before_work(self):
-        """The apply progress modal must be drawn at 0% before the worker
-        thread starts, so it never appears already mid-progress."""
         from rapmat.core.dedup_analysis import DedupSimulationResult
         from rapmat.tui.screens.dedup import DedupScreen
 

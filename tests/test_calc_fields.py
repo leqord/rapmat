@@ -1,5 +1,3 @@
-"""Tests for the shared calculator form fields."""
-
 import pytest
 
 from rapmat.tui.widgets import calc_fields
@@ -35,11 +33,6 @@ def _select(form: FormGroup, key: str, value: str) -> None:
     widget._pick(None, widget.options.index(value))
 
 
-# ------------------------------------------------------------------ #
-#  Field set
-# ------------------------------------------------------------------ #
-
-
 class TestFieldSet:
     def test_all_keys_present(self):
         keys = {spec.key for spec in calculator_fields()}
@@ -60,11 +53,6 @@ class TestFieldSet:
         fields = calculator_fields(calc_default="NOT-A-CALCULATOR")
         form = FormGroup(fields, label_width=20)
         assert form.get_values()["calculator"] == "MATTERSIM"
-
-
-# ------------------------------------------------------------------ #
-#  Enable logic
-# ------------------------------------------------------------------ #
 
 
 class TestEnableLogic:
@@ -102,11 +90,6 @@ class TestEnableLogic:
         _select(form, "calculator", "MATTERSIM")
         assert form.is_field_disabled("calculator_config")
         assert form.is_field_disabled("vasp_command")
-
-
-# ------------------------------------------------------------------ #
-#  Values
-# ------------------------------------------------------------------ #
 
 
 class TestIsAutoSettings:

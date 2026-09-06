@@ -41,10 +41,6 @@ class ModalDialog(urwid.WidgetWrap):
             return None
         return super().keypress(size, key)
 
-    # ------------------------------------------------------------------ #
-    #  Static constructors
-    # ------------------------------------------------------------------ #
-
     @staticmethod
     def confirm(
         title: str,
@@ -226,9 +222,6 @@ class ModalDialog(urwid.WidgetWrap):
 
 
 class FormDialog(ModalDialog):
-    """A modal dialog. 
-    Esc triggers ``on_cancel``."""
-
     def __init__(
         self,
         title: str,
@@ -287,7 +280,6 @@ class FormDialog(ModalDialog):
         self._error.set_text(("form_error", message))
 
     def validated_values(self) -> dict | None:
-        """Form values, or ``None`` after displaying validation errors."""
         errors = self._form.validate()
         if errors:
             self.set_error("; ".join(errors))

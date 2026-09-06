@@ -32,10 +32,6 @@ class PhononDispersionScreen(ScreenBase):
         self._progress_panel = ProgressPanel(title=" Phonon Progress ")
         self._running = False
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._frame = self._build_frame()
         return self._frame
@@ -47,10 +43,6 @@ class PhononDispersionScreen(ScreenBase):
                 help="Compute the phonon dispersion", priority=10,
             ),
         ]
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _build_frame(self) -> urwid.Frame:
         self._form = FormGroup(
@@ -130,10 +122,6 @@ class PhononDispersionScreen(ScreenBase):
 
         self.refresh_footer()
         return urwid.Frame(body=body)
-
-    # ------------------------------------------------------------------ #
-    #  Submit
-    # ------------------------------------------------------------------ #
 
     def _on_start(self, _btn=None) -> None:
         if self._running:
@@ -298,10 +286,6 @@ class PhononDispersionScreen(ScreenBase):
 
         progress.update(5, 5, "Done")
         progress.finish()
-
-    # ------------------------------------------------------------------ #
-    #  Completion
-    # ------------------------------------------------------------------ #
 
     def _on_complete(self) -> None:
         self._running = False

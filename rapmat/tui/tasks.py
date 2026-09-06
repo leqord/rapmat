@@ -6,10 +6,6 @@ import urwid
 
 from rapmat.utils.progress import ProgressCallback
 
-# ------------------------------------------------------------------ #
-#  Thread-safe progress state
-# ------------------------------------------------------------------ #
-
 
 @dataclass
 class TaskProgress:
@@ -61,8 +57,6 @@ class TaskProgress:
         raise_on_cancel: bool = True,
         default_is_log: bool = True,
     ) -> ProgressCallback:
-        """Adapt this progress object to the ProgressCallback contract."""
-
         def _cb(
             current: int, total: int, message: str = "",
             is_log: bool | None = None,
@@ -75,11 +69,6 @@ class TaskProgress:
                 self.log(message)
 
         return _cb
-
-
-# ------------------------------------------------------------------ #
-#  Background task runner
-# ------------------------------------------------------------------ #
 
 
 class BackgroundTask:
@@ -105,10 +94,6 @@ class BackgroundTask:
         self._progress = TaskProgress()
         self._thread: threading.Thread | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Public API
-    # ------------------------------------------------------------------ #
-
     def start(self) -> None:
         self._progress = TaskProgress()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -125,10 +110,6 @@ class BackgroundTask:
             and self._thread.is_alive()
             and not self._progress.finished
         )
-
-    # ------------------------------------------------------------------ #
-    #  Internal
-    # ------------------------------------------------------------------ #
 
     def _run(self) -> None:
         try:

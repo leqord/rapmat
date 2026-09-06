@@ -21,10 +21,6 @@ class CSPSearchScreen(ScreenBase):
         self._progress_panel = ProgressPanel(title=" Run Progress ")
         self._running = False
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._state.refresh_studies_if_needed()
         self._frame = self._build_frame()
@@ -37,10 +33,6 @@ class CSPSearchScreen(ScreenBase):
                 help="Generate and relax structures", priority=10,
             ),
         ]
-
-    # ------------------------------------------------------------------ #
-    #  Form construction
-    # ------------------------------------------------------------------ #
 
     def _study_options(self) -> list[str]:
         if not self._state.studies_cache:
@@ -85,10 +77,6 @@ class CSPSearchScreen(ScreenBase):
             return "Invalid formula (e.g. Al2O3)"
         return None
 
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
-
 
     def _build_frame(self) -> urwid.Frame:
         self._form = self._build_form()
@@ -129,10 +117,6 @@ class CSPSearchScreen(ScreenBase):
 
         self.refresh_footer()
         return urwid.Frame(body=body)
-
-    # ------------------------------------------------------------------ #
-    #  Submit handler
-    # ------------------------------------------------------------------ #
 
     def _on_start(self, _btn=None) -> None:
         if self._running:
@@ -233,10 +217,6 @@ class CSPSearchScreen(ScreenBase):
         self._state.active_run = run_name
         self._state.invalidate()
         progress.finish()
-
-    # ------------------------------------------------------------------ #
-    #  Completion callbacks
-    # ------------------------------------------------------------------ #
 
     def _on_complete(self) -> None:
         self._running = False

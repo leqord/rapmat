@@ -1,5 +1,3 @@
-"""Rasterizer tests."""
-
 import math
 
 import numpy as np

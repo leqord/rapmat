@@ -10,18 +10,6 @@ from rapmat.tui.widgets.dialog import ModalDialog
 
 
 class ScreenBase:
-    """Shared scaffold for TUI screens.
-
-    Implements the router's Screen protocol.
-    Subclasses have to override:
-
-    - ``build()``: required
-    - ``bindings()``: to declare hotkeys, dispatch, footer hints and the help
-    - ``esc_label()``: if Esc does something other than going back
-    - ``_tasks()``: if they own tasks outside ``self._task``
-    - ``_dialog_host_get()``/``_dialog_host_set()``: to use ``show_dialog()``
-    """
-
     title: str = "Screen"
 
     def __init__(self, state: "AppState", router: "ScreenRouter") -> None:
@@ -36,10 +24,6 @@ class ScreenBase:
 
     def build(self) -> urwid.Widget:
         raise NotImplementedError
-
-    # ------------------------------------------------------------------ #
-    #  Key bindings
-    # ------------------------------------------------------------------ #
 
     def bindings(self) -> list[KeyBinding]:
         return []
@@ -64,10 +48,6 @@ class ScreenBase:
             return True
         return False
 
-    # ------------------------------------------------------------------ #
-    #  Footer
-    # ------------------------------------------------------------------ #
-
     def extra_hints(self) -> list:
         return []
 
@@ -83,12 +63,7 @@ class ScreenBase:
         bar.set_hints(hints)
         bar.set_message(message)
 
-    # ------------------------------------------------------------------ #
-    #  Modal dialogs
-    # ------------------------------------------------------------------ #
-
     def _dialog_host_get(self) -> "urwid.Widget | None":
-        """Current body widget that a modal dialog temporarily replaces."""
         return None
 
     def _dialog_host_set(self, widget: urwid.Widget) -> None:
@@ -125,10 +100,6 @@ class ScreenBase:
 
         self.show_dialog(_factory)
 
-    # ------------------------------------------------------------------ #
-    #  Lifecycle
-    # ------------------------------------------------------------------ #
-
     def on_resume(self) -> None:
         self.refresh_footer()
 
@@ -142,10 +113,6 @@ class ScreenBase:
         for task in self._tasks():
             task.cancel()
 
-    # ------------------------------------------------------------------ #
-    #  Background tasks
-    # ------------------------------------------------------------------ #
-
     def run_task(
         self,
         fn,
@@ -155,8 +122,6 @@ class ScreenBase:
         on_complete=None,
         on_error=None,
     ) -> BackgroundTask:
-        """Start a BackgroundTask in ``self._task`` so that
-        ``on_leave`` cancels it."""
         task = BackgroundTask(
             fn=fn,
             loop=self._state.loop,

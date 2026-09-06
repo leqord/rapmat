@@ -52,8 +52,6 @@ def _yes_no(val: bool | None, na: str = "N/A") -> str:
 
 
 def _row_attr(result: "ResultRow") -> str:
-    """Grey out rows.
-    """
     if result.excluded:
         return "unconv"
     if not result.converged:
@@ -64,7 +62,6 @@ def _row_attr(result: "ResultRow") -> str:
 
 
 def _flags_str(result: "ResultRow") -> str:
-    """Flags: R(eference endpoint) H(ull) D(uplicate) E(xcluded)."""
     chars = []
     if result.is_reference:
         chars.append("R")
@@ -330,25 +327,21 @@ class BaseResultsScreen(ScreenBase):
         return []
 
     def _header_widget(self) -> "urwid.Widget | None":
-        """Optional widget rendered above the table.
-        """
         return None
 
     def _get_symprec(self) -> float:
         return DEFAULT_SYMPREC
 
     def _persist_symprec(self, value: float) -> None:
-        """Persist an adjusted labeling symprec. Subclasses opt in."""
+        ...
 
     def _get_extra_details(self, result: "ResultRow") -> list:
         return []
 
     def _save_subdir(self) -> str | None:
-        """Name of the ``saved_<...>`` subfolder offered by default on save."""
         return getattr(self, "_run_name", None) or self._state.active_run
 
     def _save_ident(self, result: "ResultRow") -> str:
-        """Filename for a saved structure: ``structure_<ident>.<fmt>``."""
         if result.run_name:
             return f"{result.run_name}_{result.index}"
         return str(result.index)
@@ -356,12 +349,7 @@ class BaseResultsScreen(ScreenBase):
     def _on_phonon_complete(self, phonon_cutoff: float) -> None:
         pass
 
-    # ------------------------------------------------------------------ #
-    #  Phonon results
-    # ------------------------------------------------------------------ #
-
     def _phonon_clear_target(self) -> list[str]:
-        """Run names whose persisted phonon results a clear/recompute wipes."""
         return []
 
     def _reset_inmemory_phonon(self) -> None:
@@ -370,7 +358,6 @@ class BaseResultsScreen(ScreenBase):
             r.dynamical_stability = None
 
     def _wipe_phonon_results(self) -> None:
-        """Delete persisted phonon results for this view (both DB and in-memory)."""
         store = self._state.store
         for run_name in self._phonon_clear_target():
             store.clear_run_phonon_results(run_name)
@@ -627,8 +614,6 @@ class BaseResultsScreen(ScreenBase):
         )
 
     def _refresh_after_membership_change(self) -> None:
-        """Refresh the view after a change to what is in the hull set.
-        """
         self._rebuild_table()
 
     def _action_toggle_duplicates(self) -> None:
@@ -726,19 +711,15 @@ class BaseResultsScreen(ScreenBase):
         self.show_dialog(_factory)
 
     def _relabel_spg(self) -> None:
-        """Re-derive spacegroup labels in memory at the current symprec.
-        """
         if self._symprec is None:
             return
         for result in self._results:
             result.structure.symprec = self._symprec
 
     def _extra_option_fields(self) -> list:
-        """Extra fields appended to the Options dialog."""
         return []
 
     def _apply_extra_options(self, vals: dict) -> str | None:
-        """Apply extra options values."""
         return None
 
     def _action_options(self) -> None:
@@ -988,8 +969,6 @@ class BaseResultsScreen(ScreenBase):
             return False
 
     def _save_dispersion_plot(self, result: "ResultRow", out_path: Path) -> None:
-        """Regenerate a phonon dispersion plot from previous phonopy data.
-        """
         structure_id = result.structure_id
         if not structure_id:
             return

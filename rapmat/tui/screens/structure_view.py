@@ -1,6 +1,3 @@
-"""Fullscreen 3D structure viewer.
-"""
-
 import math
 import time
 from typing import Callable, Optional
@@ -103,10 +100,6 @@ class StructureViewScreen(ScreenBase):
         self._identity = urwid.Text("", wrap="clip")
         self._viewstate = urwid.Text("", wrap="clip")
 
-    # ------------------------------------------------------------------ #
-    #  Construction
-    # ------------------------------------------------------------------ #
-
     @property
     def breadcrumb_title(self) -> str:
         result = self._result
@@ -152,10 +145,6 @@ class StructureViewScreen(ScreenBase):
         self.refresh_footer()
         return urwid.Frame(body=body)
 
-    # ------------------------------------------------------------------ #
-    #  Scene
-    # ------------------------------------------------------------------ #
-
     def _rebuild_scene(self) -> None:
         result = self._result
         try:
@@ -196,7 +185,6 @@ class StructureViewScreen(ScreenBase):
     def _schedule_redraw(self) -> None:
         loop = self._state.loop
         if loop is None:
-            # No loop to pace against (headless/tests): repaint immediately.
             if self._view is not None:
                 self._view.mark_dirty()
             return
@@ -224,10 +212,6 @@ class StructureViewScreen(ScreenBase):
             except Exception:
                 pass
         self._redraw_handle = None
-
-    # ------------------------------------------------------------------ #
-    #  Header
-    # ------------------------------------------------------------------ #
 
     def _spacegroup(self) -> str:
         if self._spg is None:
@@ -277,12 +261,7 @@ class StructureViewScreen(ScreenBase):
         state.append(color_depth_label(self._state.color_depth))
         self._viewstate.set_text([("details", " " + SEP.join(state))])
 
-    # ------------------------------------------------------------------ #
-    #  Key bindings
-    # ------------------------------------------------------------------ #
-
     def keypress(self, size: tuple, key: str) -> str | None:
-        # Remember the key so one Rotate binding can serve all eight arrows.
         self._last_key = key if isinstance(key, str) else ""
         return super().keypress(size, key)
 
@@ -352,10 +331,6 @@ class StructureViewScreen(ScreenBase):
             ),
         ]
 
-    # ------------------------------------------------------------------ #
-    #  Actions
-    # ------------------------------------------------------------------ #
-
     def _step(self, delta: int) -> None:
         if not self._results:
             return
@@ -402,10 +377,6 @@ class StructureViewScreen(ScreenBase):
         self._supercell = 1 if self._supercell > 1 else 2
         self._rebuild_scene()
 
-    # ------------------------------------------------------------------ #
-    #  Spin
-    # ------------------------------------------------------------------ #
-
     def _action_toggle_spin(self) -> None:
         self._spinning = not self._spinning
         if self._spinning:
@@ -447,10 +418,6 @@ class StructureViewScreen(ScreenBase):
         self._spin_handle = loop.set_alarm_in(
             _next_delay(SPIN_INTERVAL, render_seconds), self._on_spin_tick
         )
-
-    # ------------------------------------------------------------------ #
-    #  Lifecycle
-    # ------------------------------------------------------------------ #
 
     def on_resume(self) -> None:
         super().on_resume()

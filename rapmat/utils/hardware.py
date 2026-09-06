@@ -1,6 +1,3 @@
-"""Hardware (CPU / CUDA) cached detection.
-"""
-
 from __future__ import annotations
 
 import threading
@@ -19,7 +16,6 @@ _cache: HardwareInfo | None = None
 
 
 def detect() -> HardwareInfo:
-    """Detect CPU/CUDA, cache the result. Blocking."""
     global _cache
     with _lock:
         if _cache is None:
@@ -28,7 +24,6 @@ def detect() -> HardwareInfo:
 
 
 def cached() -> HardwareInfo | None:
-    """Return the detected info if ready, else ``None``. Never blocks."""
     return _cache
 
 
@@ -49,7 +44,6 @@ def _detect() -> HardwareInfo:
 
 
 def header_markup(info: HardwareInfo | None) -> list[tuple[str, str]]:
-    """Markup for the right-aligned header badge."""
     if info is None:
         return [("cpu_tag", " ⏳ ")]
     if not info.torch_installed:
@@ -60,7 +54,6 @@ def header_markup(info: HardwareInfo | None) -> list[tuple[str, str]]:
 
 
 def home_label(info: HardwareInfo | None) -> str:
-    """Longer hardware line for the home screen's DB-info panel."""
     if info is None:
         return "⏳  detecting..."
     if not info.torch_installed:

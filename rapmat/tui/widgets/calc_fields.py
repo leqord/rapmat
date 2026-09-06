@@ -21,10 +21,6 @@ from rapmat.tui.widgets.form import (
 if TYPE_CHECKING:
     pass
 
-# ------------------------------------------------------------------ #
-#  Constants
-# ------------------------------------------------------------------ #
-
 
 SETTINGS_TOML = "TOML file"
 SETTINGS_AUTO = "Auto (OMat24)"
@@ -44,11 +40,6 @@ def _calc_options() -> list[str]:
 
 def is_auto_settings(vals: dict) -> bool:
     return vals.get("calculator_settings") == SETTINGS_AUTO
-
-
-# ------------------------------------------------------------------ #
-#  Field factory
-# ------------------------------------------------------------------ #
 
 
 def calculator_fields(
@@ -122,11 +113,6 @@ def phonon_fields(
     return fields
 
 
-# ------------------------------------------------------------------ #
-#  Signal wiring
-# ------------------------------------------------------------------ #
-
-
 def _needs_external_config(calculator_value: str) -> bool:
     try:
         return Calculators(calculator_value) in REQUIRES_EXTERNAL_CONFIG
@@ -173,11 +159,6 @@ def setup_calculator_signals(
 
             form.set_field_disabled("force_conv_crit", disabled=True)
             form.set_field_disabled("steps_max", disabled=True)
-
-
-# ------------------------------------------------------------------ #
-#  TOML config validation
-# ------------------------------------------------------------------ #
 
 
 def parse_toml_config(vals: dict) -> tuple[dict, str | None]:

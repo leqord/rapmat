@@ -25,10 +25,6 @@ class CSPResumeScreen(ScreenBase):
         self._progress_panel = ProgressPanel(title=" Resume Progress ")
         self._running = False
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._frame = self._build_frame()
         return self._frame
@@ -40,10 +36,6 @@ class CSPResumeScreen(ScreenBase):
                 help="Resume the interrupted run", priority=10,
             ),
         ]
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _build_frame(self) -> urwid.Frame:
         run_name = self._state.active_run or ""
@@ -106,10 +98,6 @@ class CSPResumeScreen(ScreenBase):
         self.refresh_footer()
         return urwid.Frame(body=body)
 
-    # ------------------------------------------------------------------ #
-    #  Submit
-    # ------------------------------------------------------------------ #
-
     def _on_start(self, _btn=None) -> None:
         if self._running:
             return
@@ -160,10 +148,6 @@ class CSPResumeScreen(ScreenBase):
 
         self._state.invalidate()
         progress.finish()
-
-    # ------------------------------------------------------------------ #
-    #  Completion callbacks
-    # ------------------------------------------------------------------ #
 
     def _on_complete(self) -> None:
         self._running = False

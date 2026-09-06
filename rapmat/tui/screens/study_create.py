@@ -48,14 +48,9 @@ class StudyCreateScreen(ScreenBase):
         self._frame: urwid.Frame | None = None
         self._main_body: urwid.Widget | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._form = FormGroup(
             fields=[
-                # --- System ---
                 text_field(
                     key="system",
                     label="System",
@@ -81,9 +76,7 @@ class StudyCreateScreen(ScreenBase):
                     default="",
                     validator=_validate_thickness,
                 ),
-                # --- Relaxation ---
                 *calculator_fields(include_convergence=True),
-                # --- Etc ---
                 checkbox_field("sanity_pymatgen", "Sanity check", default=False),
                 float_field("symprec", "Default symprec", default=1e-2),
             ],
@@ -161,10 +154,6 @@ class StudyCreateScreen(ScreenBase):
 
     def esc_label(self) -> str:
         return "Cancel"
-
-    # ------------------------------------------------------------------ #
-    #  Submit
-    # ------------------------------------------------------------------ #
 
     def _on_submit(self, _btn) -> None:
         if self._form is None or self._error_text is None:

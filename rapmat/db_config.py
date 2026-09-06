@@ -17,11 +17,6 @@ _GENERAL_DEFAULTS: dict[str, str] = {
 _LEGACY_MODES = ("local", "remote")
 
 
-# ------------------------------------------------------------------ #
-#  Load / save
-# ------------------------------------------------------------------ #
-
-
 def load_db_config() -> dict:
     general: dict | None = None # TODO: move to Optional[X]
 
@@ -49,10 +44,6 @@ def clear_db_config() -> bool:
         return True
     return False
 
-
-# ------------------------------------------------------------------ #
-#  Store resolution
-# ------------------------------------------------------------------ #
 
 _DEFAULT_SQLITE_PATH = str(APP_DATA_DIR / "sqlite")
 

@@ -24,10 +24,6 @@ from rapmat.tui.widgets.form import (FormGroup, checkbox_field,
 from rapmat.tui.widgets.progress import ProgressPanel
 
 
-# ------------------------------------------------------------------ #
-#  Results screen
-# ------------------------------------------------------------------ #
-
 _RESULT_COLS_BASE = [
     ("ID", 8),
     ("Formula", 10),
@@ -45,9 +41,6 @@ _DYN_COLS = [
 
 
 class EvalResultsScreen(BaseResultsScreen):
-    """Evaluation table with filter support and live metric recompute.
-    """
-
     title = "Eval Results"
 
     def __init__(
@@ -78,10 +71,6 @@ class EvalResultsScreen(BaseResultsScreen):
     def breadcrumb_title(self) -> str:
         return f"Eval Results: {self._run_name}"
 
-    # ------------------------------------------------------------------ #
-    #  Data + metric recompute
-    # ------------------------------------------------------------------ #
-
     def _fetch_data(self, progress_callback=None) -> None:
         self._results = list(self._eval_rows)
         self._show_duplicate_col = any(
@@ -97,7 +86,6 @@ class EvalResultsScreen(BaseResultsScreen):
         self._recompute_view(self._get_display_results())
 
     def _recompute_view(self, display: list) -> None:
-        """Recompute metrics and the in-view ranks."""
         from rapmat.core.evaluation import (comparison_from_result_rows,
                                             compute_ranking_metrics,
                                             compute_stability_metrics)
@@ -117,7 +105,6 @@ class EvalResultsScreen(BaseResultsScreen):
 
     @staticmethod
     def _compute_rank_map(display: list) -> dict:
-        """Rank within the visible set."""
         mlip_rank = {
             r.structure_id: i
             for i, r in enumerate(
@@ -139,10 +126,6 @@ class EvalResultsScreen(BaseResultsScreen):
 
         self._recompute_view(self._get_display_results())
         super()._rebuild_table()
-
-    # ------------------------------------------------------------------ #
-    #  Header
-    # ------------------------------------------------------------------ #
 
     def _header_widget(self) -> urwid.Widget:
         self._metrics_text = urwid.Text(self._metrics_markup())
@@ -191,10 +174,6 @@ class EvalResultsScreen(BaseResultsScreen):
         else:
             header_parts.append(("details", "  No metrics available"))
         return header_parts
-
-    # ------------------------------------------------------------------ #
-    #  Table
-    # ------------------------------------------------------------------ #
 
     def _columns_def(self) -> list:
         cols = list(_RESULT_COLS_BASE)
@@ -267,10 +246,6 @@ class EvalResultsScreen(BaseResultsScreen):
             )
         return extras
 
-    # ------------------------------------------------------------------ #
-    #  Footer / keys
-    # ------------------------------------------------------------------ #
-
     def bindings(self) -> list[KeyBinding]:
         drop = {"p", "o", "x", "e"}
         gates = {
@@ -287,11 +262,6 @@ class EvalResultsScreen(BaseResultsScreen):
                 b = replace(b, enabled=gates[key])
             out.append(b)
         return out
-
-
-# ------------------------------------------------------------------ #
-#  Main evaluation form screen
-# ------------------------------------------------------------------ #
 
 
 class EvalScreen(ScreenBase):
@@ -319,10 +289,6 @@ class EvalScreen(ScreenBase):
         self._records: list["Structure"] = []
         self._eval_vals: dict | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._state.refresh_runs_if_needed()
         self._widget = self._build_frame()
@@ -346,10 +312,6 @@ class EvalScreen(ScreenBase):
 
     def _dialog_host_set(self, widget: urwid.Widget) -> None:
         self._widget.original_widget = widget
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _build_frame(self) -> urwid.WidgetPlaceholder:
         self._form = FormGroup(
@@ -427,10 +389,6 @@ class EvalScreen(ScreenBase):
         self.refresh_footer()
 
         return urwid.WidgetPlaceholder(urwid.Frame(body=body))
-
-    # ------------------------------------------------------------------ #
-    #  Submit & Actions
-    # ------------------------------------------------------------------ #
 
     def _on_clear_cache(self, _btn=None) -> None:
         if self._running:
@@ -617,10 +575,6 @@ class EvalScreen(ScreenBase):
 
         self._eval_rows = rows
         progress.finish()
-
-    # ------------------------------------------------------------------ #
-    #  Completion
-    # ------------------------------------------------------------------ #
 
     def _on_complete(self) -> None:
         self._running = False

@@ -44,10 +44,6 @@ class DedupScreen(ScreenBase):
         self._apply_bar: urwid.ProgressBar | None = None
         self._apply_text: urwid.Text | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._state.refresh_runs_if_needed()
         self._frame = self._build_frame()
@@ -108,10 +104,6 @@ class DedupScreen(ScreenBase):
                 bar.set_message(message or "Applying to database... please wait")
             return
         super().refresh_footer(message)
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _metric_key(self, choice: str) -> str:
         from rapmat.core.dedup_analysis import DEFAULT_METRIC
@@ -238,10 +230,6 @@ class DedupScreen(ScreenBase):
         self._form.set_values({"dedup_threshold": spec.default_threshold})
         self._metric_hint.set_text(("details", f"  {spec.hint}"))
 
-    # ------------------------------------------------------------------ #
-    #  Submit
-    # ------------------------------------------------------------------ #
-
     def _validate(self, vals: dict) -> list[str]:
         errors = self._form.validate()
         threshold = vals["dedup_threshold"]
@@ -271,7 +259,6 @@ class DedupScreen(ScreenBase):
         self._error_text.set_text("")
         self._progress_panel.clear()
 
-        # Close any existing overlay
         if self._overlay_open:
             self._close_overlay()
 
@@ -319,10 +306,6 @@ class DedupScreen(ScreenBase):
         progress.update(4, 4, "Done")
         progress.finish()
 
-    # ------------------------------------------------------------------ #
-    #  Completion - show results overlay
-    # ------------------------------------------------------------------ #
-
     def _on_complete(self) -> None:
         self._running = False
         self._progress_panel.set_finished(True, "Analysis complete!")
@@ -340,7 +323,6 @@ class DedupScreen(ScreenBase):
         sim = d["sim"]
         dropped_pct = 100 * sim.final_dropped / max(sim.total, 1)
 
-        # -- Header ------------------------------------ #
         summary = urwid.Text(
             [
                 ("success", f"  {d['n_structs']}"),
@@ -352,7 +334,6 @@ class DedupScreen(ScreenBase):
             ]
         )
 
-        # -- Distance stats  ---------------------------- #
         below_pct = 100 * d["below_thresh"] / max(d["n_pairs"], 1)
         dist_stats = urwid.Text(
             [
@@ -374,7 +355,6 @@ class DedupScreen(ScreenBase):
             ]
         )
 
-        # -- Waterfall table ------------------------------------------ #
         after_vec = (
             sim.total
             - sim.dropped_by_vector
@@ -435,7 +415,6 @@ class DedupScreen(ScreenBase):
             format_row=lambda r: [r["stage"], r["kept"], r["change"], r["notes"]],
         )
 
-        # -- Percentile table ----------------------------------------- #
         perc_rows = []
         for p, thresh, kept in d["percentiles"]:
             perc_rows.append(
@@ -452,7 +431,6 @@ class DedupScreen(ScreenBase):
             format_row=lambda r: [r["pct"], r["threshold"], r["kept"]],
         )
 
-        # -- Collision summary ------------------------- #
         collision_widgets = []
         if d.get("energy_window") is not None and sim.energy_comparisons > 0:
             rate = 100 * sim.energy_mismatches / sim.energy_comparisons
@@ -500,7 +478,6 @@ class DedupScreen(ScreenBase):
                 )
             )
 
-        # -- Scrollable --------------------------------- #
         body_widgets = [
             summary,
             urwid.Divider(),
@@ -539,7 +516,6 @@ class DedupScreen(ScreenBase):
 
         scrollable_body = urwid.ListBox(urwid.SimpleListWalker(body_widgets))
 
-        # -- Pinned footer with buttons ------------------------ #
         apply_btn = urwid.AttrMap(
             urwid.Button("Apply to DB", on_press=lambda _: self._apply_to_db()),
             "menu_item",
@@ -615,10 +591,6 @@ class DedupScreen(ScreenBase):
         self._running = False
         self._progress_panel.set_finished(False, f"Error: {error}")
 
-    # ------------------------------------------------------------------ #
-    #  Save plot
-    # ------------------------------------------------------------------ #
-
     def _save_plot(self) -> None:
         if self._result_data is None or "distances" not in self._result_data:
             return
@@ -639,10 +611,6 @@ class DedupScreen(ScreenBase):
         except Exception as e:
             if self._state.status_bar:
                 self._state.status_bar.set_message(f"Plot error: {e}")
-
-    # ------------------------------------------------------------------ #
-    #  Apply dedup results to DB
-    # ------------------------------------------------------------------ #
 
     def _apply_to_db(self) -> None:
         if self._applying:
@@ -769,10 +737,6 @@ class DedupScreen(ScreenBase):
         if self._state.status_bar:
             self._state.status_bar.set_message(f"Apply failed: {error}")
 
-    # ------------------------------------------------------------------ #
-    #  Clear duplicate labels
-    # ------------------------------------------------------------------ #
-
     def _confirm_clear_duplicates(self) -> None:
         if self._running or self._applying:
             return
@@ -796,10 +760,6 @@ class DedupScreen(ScreenBase):
             msg = f"Clear failed: {exc}"
         if self._state.status_bar:
             self._state.status_bar.set_message(msg)
-
-    # ------------------------------------------------------------------ #
-    #  Key handling
-    # ------------------------------------------------------------------ #
 
     def keypress(self, size: tuple, key: str) -> str | None:
         if self._applying:

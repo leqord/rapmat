@@ -1,5 +1,3 @@
-"""Tests for the dedup analysis / simulation module."""
-
 import numpy as np
 import pytest
 from ase.build import bulk
@@ -32,11 +30,6 @@ def _make_entry(struct_id, atoms, energy, vector, forces=None):
     )
 
 
-# ------------------------------------------------------------------ #
-#  compute_pairwise_distances
-# ------------------------------------------------------------------ #
-
-
 class TestPairwiseDistances:
     def test_identical_vectors(self):
         vecs = np.array([[1.0, 0.0], [1.0, 0.0]])
@@ -55,15 +48,10 @@ class TestPairwiseDistances:
         assert len(d) == 3
 
     def test_default_metric_is_cosine(self):
-        vecs = np.array([[1.0, 0.0], [2.0, 0.0]])   # same direction, 2x length
+        vecs = np.array([[1.0, 0.0], [2.0, 0.0]])
         assert compute_pairwise_distances(vecs)[0] == pytest.approx(0.0)
         assert compute_pairwise_distances(
             vecs, metric="euclidean")[0] == pytest.approx(1.0)
-
-
-# ------------------------------------------------------------------ #
-#  simulate_deduplication
-# ------------------------------------------------------------------ #
 
 
 class TestSimulateDedup:
@@ -157,7 +145,6 @@ class TestSimulateDedup:
         assert len(calls) > 0
 
     def test_lower_energy_kept(self, soap):
-        """The structure with lower energy is kept when two are identical."""
         cu = bulk("Cu", "fcc", a=3.615)
         vec = soap.compute(cu)
         entries = [
@@ -167,11 +154,6 @@ class TestSimulateDedup:
         result = simulate_deduplication(entries, threshold=1.0)
         assert "s/low" in result.kept_ids
         assert "s/high" in result.dropped_ids
-
-
-# ------------------------------------------------------------------ #
-#  Distance metric and SOAP sigma
-# ------------------------------------------------------------------ #
 
 
 class TestMetricAndSigma:
@@ -229,11 +211,6 @@ class TestMetricAndSigma:
     def test_unknown_metric_rejected(self):
         with pytest.raises(DedupAnalysisError):
             run_dedup_analysis(None, "whatever", metric="chebyshev")
-
-
-# ------------------------------------------------------------------ #
-#  Energy window
-# ------------------------------------------------------------------ #
 
 
 class TestEnergyWindow:
@@ -334,11 +311,6 @@ class TestEnergyMergeMask:
         assert k1 >= k0
 
 
-# ------------------------------------------------------------------ #
-#  find_threshold_for_survival
-# ------------------------------------------------------------------ #
-
-
 class TestFindThresholdForSurvival:
     @pytest.fixture
     def soap(self):
@@ -380,7 +352,6 @@ class TestFindThresholdForSurvival:
         assert kept == 2
 
     def test_monotonic_survival(self, soap):
-        """Lower survival target requires a larger (or equal) threshold."""
         entries = []
         for i in range(30):
             cu = bulk("Cu", "fcc", a=3.615 + i * 0.05)
@@ -391,11 +362,6 @@ class TestFindThresholdForSurvival:
             thresh, _ = find_threshold_for_survival(entries, target)
             assert thresh >= prev_thresh - 1e-6
             prev_thresh = thresh
-
-
-# ------------------------------------------------------------------ #
-#  plot_distance_histogram
-# ------------------------------------------------------------------ #
 
 
 class TestPlotHistogram:
@@ -420,11 +386,6 @@ class TestPlotHistogram:
         )
         assert out.exists()
         assert out.stat().st_size > 0
-
-
-# ------------------------------------------------------------------ #
-#  Store integration: get_structures_for_analysis
-# ------------------------------------------------------------------ #
 
 
 class TestStoreAnalysis:
@@ -511,11 +472,6 @@ class TestStoreAnalysis:
         assert len(both) == 2
 
     def _store_two_relaxed_with_forces(self, tmp_path, soap, f1, f2):
-        """Persist two same-vector relaxed structures carrying the given forces,
-        reload them via the store, and attach SOAP vectors.
-
-        Returns the reloaded structure dicts ready for ``simulate_deduplication``.
-        """
         store = SQLiteStore.from_path(tmp_path / "forces_db")
         store.create_study(
             study_id="run1",
@@ -545,7 +501,6 @@ class TestStoreAnalysis:
         return results
 
     def test_forces_confirm_drop_via_store(self, tmp_path, soap):
-        """Same-vector structures with parallel forces are confirmed duplicates."""
         cu = bulk("Cu", "fcc", a=3.615)
         parallel = np.tile([0.1, 0.0, 0.0], (len(cu), 1))
         results = self._store_two_relaxed_with_forces(
@@ -558,7 +513,6 @@ class TestStoreAnalysis:
         assert sim.kept == 1
 
     def test_forces_rescue_via_store(self, tmp_path, soap):
-        """Same-vector structures with opposing forces are rescued (kept)."""
         cu = bulk("Cu", "fcc", a=3.615)
         forward = np.tile([0.1, 0.0, 0.0], (len(cu), 1))
         backward = np.tile([-0.1, 0.0, 0.0], (len(cu), 1))
@@ -571,11 +525,6 @@ class TestStoreAnalysis:
         assert sim.force_comparisons >= 1
         assert sim.rescued_by_forces >= 1
         assert sim.kept == 2
-
-
-# ------------------------------------------------------------------ #
-#  Deduplication screen
-# ------------------------------------------------------------------ #
 
 
 class TestDedupScreenValidation:

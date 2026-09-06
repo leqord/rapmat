@@ -55,7 +55,6 @@ class CalcDirAllocator:
 
     @property
     def scope_path(self) -> Path | None:
-        """The directory the current label's calculations are grouped in."""
         if self._root is None:
             return None
         if self._label is None:

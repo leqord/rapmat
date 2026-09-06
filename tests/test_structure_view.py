@@ -1,5 +1,3 @@
-"""Structure viewer."""
-
 import math
 import sys
 
@@ -109,11 +107,6 @@ def _canvas_text(canvas) -> str:
     )
 
 
-# ------------------------------------------------------------------ #
-#  Camera
-# ------------------------------------------------------------------ #
-
-
 def test_rotate_keys_change_the_camera(view_env):
     _state, screen, widget = view_env
     yaw, pitch = screen._yaw, screen._pitch
@@ -142,7 +135,7 @@ def test_arrow_and_vim_keys_agree(view_env):
 def test_pitch_wraps_instead_of_stopping(view_env):
     _state, screen, widget = view_env
     start = screen._pitch
-    for _ in range(60):                       # 60 * 6deg = one full turn
+    for _ in range(60):
         screen.keypress((), "down")
     assert screen._pitch == pytest.approx(start + 2 * math.pi)
     widget.render(_SIZE, focus=True)
@@ -156,7 +149,7 @@ def test_upside_down_view_still_renders(view_env):
     from rapmat.tui.widgets.halfblock import GLYPH
 
     _state, screen, widget = view_env
-    for _ in range(30):                       # past the pole
+    for _ in range(30):
         screen.keypress((), "down")
     text = _canvas_text(widget.render(_SIZE, focus=True))
     assert text.count(GLYPH) > 1000
@@ -215,11 +208,6 @@ def test_reset_restores_the_camera_but_not_the_style(view_env):
     assert screen._style != "ball"
 
 
-# ------------------------------------------------------------------ #
-#  Scene toggles
-# ------------------------------------------------------------------ #
-
-
 def test_style_cycles_back_around(view_env):
     _state, screen, widget = view_env
     assert screen._style == "ball"
@@ -260,11 +248,6 @@ def test_cell_bindings_disabled_for_a_molecule(app_env):
     assert _binding(screen, "c").is_enabled() is False
     screen.keypress((), "s")
     assert screen._supercell == 1
-
-
-# ------------------------------------------------------------------ #
-#  Browsing
-# ------------------------------------------------------------------ #
 
 
 def test_next_and_prev_step_through_the_list(view_env):
@@ -396,11 +379,6 @@ def test_redraw_does_not_recompute_the_spacegroup(view_env, monkeypatch):
     assert len(calls) > baseline
 
 
-# ------------------------------------------------------------------ #
-#  Degraded terminals and edge cases
-# ------------------------------------------------------------------ #
-
-
 def test_colour_mode_is_always_shown(app_env):
     from rapmat.tui.theme import TRUECOLOR
 
@@ -480,11 +458,6 @@ def test_the_picture_is_actually_drawn(view_env):
     assert text.count(GLYPH) > 1000
 
 
-# ------------------------------------------------------------------ #
-#  Spin
-# ------------------------------------------------------------------ #
-
-
 def test_spin_schedules_and_on_leave_cancels(view_env):
     _state, screen, _widget = view_env
     loop = _FakeLoop()
@@ -545,11 +518,6 @@ def test_spin_without_a_loop_is_inert(view_env):
     assert _binding(screen, " ").is_enabled() is False
     screen._action_toggle_spin()
     assert screen._spin_handle is None
-
-
-# ------------------------------------------------------------------ #
-#  Redraw pacing
-# ------------------------------------------------------------------ #
 
 
 def test_rotation_does_not_rebuild_the_footer(view_env):

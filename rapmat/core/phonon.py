@@ -85,8 +85,6 @@ def calculate_phonons_with_freq(
     log_label: str | None = None,
     log_callback=None,
 ) -> Tuple[Phonopy, float]:
-    """Run a phonon calculation and return both the ``Phonopy`` object and the
-    minimum frequency."""
     if reduce_primitive:
         from rapmat.utils.structure import standardize_atoms
 
@@ -143,14 +141,7 @@ def structure_has_imag_phonon_freq(phonons: Phonopy, threshold: float = -1e-3) -
     return get_mesh_min_frequency(phonons) < threshold
 
 
-# ------------------------------------------------------------------ #
-#  Persistence
-# ------------------------------------------------------------------ #
-
-
 def serialize_phonons(phonons: Phonopy) -> str:
-    """Serialize a Phonopy object to a gzip -> base64.
-    """
     import base64
     import gzip
 
@@ -163,8 +154,6 @@ def serialize_phonons(phonons: Phonopy) -> str:
 
 
 def deserialize_phonons(blob: str) -> Phonopy:
-    """Reconstruct a Phonopy object from a string.
-    """
     import base64
     import gzip
     import os
@@ -186,7 +175,6 @@ def deserialize_phonons(blob: str) -> Phonopy:
 
 
 def save_phonon_dispersion(phonons: Phonopy, save_path) -> None:
-    """Render and save a phonon dispersion plot."""
     import warnings
 
     import matplotlib

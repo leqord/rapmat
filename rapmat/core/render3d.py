@@ -1,6 +1,3 @@
-"""Software rasterizer.
-"""
-
 import dataclasses
 import math
 
@@ -20,16 +17,16 @@ MIN_ATOM_RADIUS_PX = 0.35
 
 @dataclasses.dataclass(slots=True)
 class Scene:
-    pos: np.ndarray             # (N, 3)
-    radius: np.ndarray          # (N,)
-    color: np.ndarray           # (N, 3)
-    bond_a: np.ndarray          # (M, 3)
-    bond_b: np.ndarray          # (M, 3)
-    bond_ca: np.ndarray         # (M, 3)
-    bond_cb: np.ndarray         # (M, 3)
-    edges: np.ndarray           # (E, 2, 3)
-    center: np.ndarray          # (3,)
-    extent: float               # halfdiagonal, >= MIN_EXTENT
+    pos: np.ndarray
+    radius: np.ndarray
+    color: np.ndarray
+    bond_a: np.ndarray
+    bond_b: np.ndarray
+    bond_ca: np.ndarray
+    bond_cb: np.ndarray
+    edges: np.ndarray
+    center: np.ndarray
+    extent: float
     n_atoms: int
     has_cell: bool
     can_supercell: bool

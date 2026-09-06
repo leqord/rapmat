@@ -1,5 +1,3 @@
-"""Pytest configuration and fixtures."""
-
 import os
 
 import spglib
@@ -54,7 +52,6 @@ def add_generated_candidate(
     spg: int = 1,
     fu: int = 1,
 ) -> str:
-    """Insert a single 'generated' candidate via the placeholder pipeline."""
     store.add_generation_placeholders(run_name, [(struct_id, spg, fu)])
     store.update_generated_structure(struct_id, atoms)
     return struct_id
@@ -68,7 +65,6 @@ def add_relaxed_structure(
     struct_id: str,
     converged: bool = True,
 ) -> None:
-    """Add a structure and immediately mark it relaxed with the given energy."""
     add_generated_candidate(store, run_name, struct_id, atoms)
 
     store.update_structure(
@@ -81,11 +77,6 @@ def add_relaxed_structure(
             "converged": converged,
         },
     )
-
-
-# ------------------------------------------------------------------ #
-#  Common atom fixtures
-# ------------------------------------------------------------------ #
 
 
 @pytest.fixture
@@ -103,11 +94,6 @@ def al_fcc():
     return bulk("Al", "fcc", a=4.05)
 
 
-# ------------------------------------------------------------------ #
-#  Store factory fixture (dual-backend)
-# ------------------------------------------------------------------ #
-
-
 def _make_sqlite(path):
     return SQLiteStore.from_path(path)
 
@@ -117,7 +103,6 @@ _BACKENDS = {"sqlite": _make_sqlite}
 
 @pytest.fixture(params=list(_BACKENDS))
 def store_factory(request, tmp_path):
-    """Dual-backend factory."""
     maker = _BACKENDS[request.param]
     created: list[StructureStore] = []
 
@@ -136,17 +121,10 @@ def store_factory(request, tmp_path):
 
 @pytest.fixture
 def store(store_factory):
-    """A single store, auto-closed."""
     return store_factory()
 
 
-# ------------------------------------------------------------------ #
-#  Raw access helpers
-# ------------------------------------------------------------------ #
-
-
 def read_batch_config(store: StructureStore, run_name: str) -> dict:
-    """The run's raw stored batch config, not merged with the study."""
     rows = store._read(
         "SELECT batch_config_json FROM run WHERE name = ?", (run_name,)
     )
@@ -161,7 +139,6 @@ def phonon_params_blob(store: StructureStore, structure_id: str):
 
 
 def force_heartbeat(store: StructureStore, run_name: str, ts: str) -> None:
-    """Force a run's heartbeat to an arbitrary timestamp."""
     store._write("UPDATE run SET heartbeat = ? WHERE name = ?", (ts, run_name))
 
 
@@ -171,27 +148,12 @@ def read_run_field(store: StructureStore, run_name: str, *fields: str) -> dict:
     return rows[0]
 
 
-# ------------------------------------------------------------------ #
-#  Pre-populated hull store
-# ------------------------------------------------------------------ #
-
-
 @pytest.fixture(params=list(_BACKENDS))
 def hull_store(request, tmp_path):
-    """Store pre-populated with a synthetic Al-Cu binary system.
-
-    Reference energies (eV/A):
-        Al = -3.0,  Cu = -4.0
-
-    Intermediate structures:
-        AlCu   (epa=-5.0, 2 atoms)  -> formation_energy = -1.5  (ON hull)
-        Al3Cu  (epa=-3.3, 4 atoms)  -> formation_energy = -0.05 (ABOVE hull)
-    """
     store = _BACKENDS[request.param](tmp_path / "hull_db")
 
     store.create_study("test-study", system="Al-Cu", domain="bulk", calculator="mock")
 
-    # Pure-Al endpoint
     store.create_run(
         "al-run",
         config={"formula": {"Al": 1}, "calculator": "mock"},
@@ -199,7 +161,6 @@ def hull_store(request, tmp_path):
     )
     add_relaxed_structure(store, "al-run", bulk("Al", "fcc", a=4.05), -3.0, "al-run/1")
 
-    # Pure-Cu endpoint
     store.create_run(
         "cu-run",
         config={"formula": {"Cu": 1}, "calculator": "mock"},
@@ -207,8 +168,6 @@ def hull_store(request, tmp_path):
     )
     add_relaxed_structure(store, "cu-run", bulk("Cu", "fcc", a=3.615), -4.0, "cu-run/1")
 
-    # AlCu intermediate    
-    # AlCu ON hull
     store.create_run(
         "alcu-on",
         config={"formula": {"Al": 1, "Cu": 1}, "calculator": "mock"},
@@ -222,9 +181,6 @@ def hull_store(request, tmp_path):
     )
     add_relaxed_structure(store, "alcu-on", alcu, -5.0, "alcu-on/1")
 
-    # Al3Cu intermediate (above hull)
-    # epa = -3.0 gives formation_energy = (-12.0 - (-13.0)) / 4 = +0.25 eV/A    
-    # Al3Cu ABOVE hull
     store.create_run(
         "al3cu-off",
         config={"formula": {"Al": 3, "Cu": 1}, "calculator": "mock"},
@@ -245,15 +201,8 @@ def hull_store(request, tmp_path):
         pass
 
 
-# ------------------------------------------------------------------ #
-#  CLI testing helpers
-# ------------------------------------------------------------------ #
-
-
 @contextmanager
 def mock_pyxtal_generation(atoms_list=None):
-    """Mock PyXtal generation for resumable-generation testing.
-    """
     from unittest.mock import MagicMock
 
     if atoms_list is None:
@@ -289,7 +238,6 @@ def mock_pyxtal_generation(atoms_list=None):
 
 @contextmanager
 def mock_calculator_factory():
-    """Mock calculator factory to return EMT instead of loading real calculators."""
     from rapmat.calculators.factory import load_calculator
 
     def mock_load(calculator_enum, config=None):

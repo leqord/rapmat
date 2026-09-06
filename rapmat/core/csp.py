@@ -4,10 +4,6 @@ from pathlib import Path
 from rapmat.storage.status import StructureStatus
 from rapmat.utils.progress import ProgressCallback
 
-# ------------------------------------------------------------------ #
-#  Orchestration loops (used by TUI and tests)
-# ------------------------------------------------------------------ #
-
 
 from rapmat.core.generation_worker import \
     generate_one_structure as _generate_one_structure
@@ -281,7 +277,7 @@ def run_generation_loop(
     search_dim = 3 if domain_val == "bulk" else 2
     formula = cfg.formula
     thickness_cutoff = cfg.thickness_cutoff
-    run_seed = cfg.seed  # int | None
+    run_seed = cfg.seed
     max_count = cfg.max_count
 
     elements = list(formula.keys())
@@ -415,8 +411,6 @@ def execute_run(
     log_callback=None,
     cancel_flag: list[bool] | None = None,
 ) -> None:
-    """Execute a claimed run to the finish.
-    """
     import time
 
     from rapmat.storage.status import RunStatus

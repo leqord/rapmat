@@ -19,10 +19,6 @@ class DbSettingsScreen(ScreenBase):
         self._status_text: urwid.Text | None = None
         self._path_edit: urwid.Edit | None = None
 
-    # ------------------------------------------------------------------ #
-    #  Screen protocol
-    # ------------------------------------------------------------------ #
-
     def build(self) -> urwid.Widget:
         self._main_body = self._build_body()
         self._frame = urwid.Frame(body=self._main_body)
@@ -34,10 +30,6 @@ class DbSettingsScreen(ScreenBase):
 
     def esc_label(self) -> str:
         return "Cancel"
-
-    # ------------------------------------------------------------------ #
-    #  Layout
-    # ------------------------------------------------------------------ #
 
     def _effective_path(self) -> str:
         from rapmat.db_config import load_db_config
@@ -124,10 +116,6 @@ class DbSettingsScreen(ScreenBase):
             trough_char=urwid.ScrollBar.Symbols.LITE_SHADE,
         )
         return urwid.Padding(scrollable, left=2, right=2)
-
-    # ------------------------------------------------------------------ #
-    #  Callbacks
-    # ------------------------------------------------------------------ #
 
     def _edited_path(self) -> str:
         if self._path_edit is None:

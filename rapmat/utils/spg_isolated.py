@@ -1,7 +1,3 @@
-"""Run spglib symmetry calls in an isolated, supervised subprocess.
-This exists just to fix spglib' crashes.
-"""
-
 from __future__ import annotations
 
 import atexit
@@ -12,10 +8,6 @@ import struct
 import subprocess
 import sys
 import threading
-
-# ------------------------------------------------------------------ #
-#  Messaging
-# ------------------------------------------------------------------ #
 
 
 def _read_msg(f):
@@ -37,11 +29,6 @@ def _write_msg(f, obj) -> None:
     f.write(struct.pack(">I", len(data)))
     f.write(data)
     f.flush()
-
-
-# ------------------------------------------------------------------ #
-#  Worker
-# ------------------------------------------------------------------ #
 
 
 def _serve() -> None:
@@ -74,17 +61,13 @@ def _serve() -> None:
                 )
             else:
                 resp = ("__err__", f"unknown op {op!r}")
-        except BaseException as exc:  # error -> report, keep working
+        except BaseException as exc:
             resp = ("__err__", f"{type(exc).__name__}: {exc}")
         try:
             _write_msg(outp, resp)
         except (BrokenPipeError, OSError):
             return
 
-
-# ------------------------------------------------------------------ #
-#  Parent
-# ------------------------------------------------------------------ #
 
 _SENTINEL = object()
 
@@ -124,7 +107,6 @@ class _Worker:
         self._q = None
 
     def call(self, op: str, payload, timeout: float = 30.0):
-        """Return the worker's response, or None on failure."""
         with self._lock:
             if self._proc is None or self._proc.poll() is not None:
                 self._kill()
@@ -170,12 +152,10 @@ def isolation_enabled() -> bool:
 
 
 def spacegroup(cell, scaled, numbers, symprec):
-    """(symbol, number) | None"""
     return _get_worker().call("spg", (cell, scaled, numbers, symprec))
 
 
 def standardize(cell, scaled, numbers, symprec, to_primitive, no_idealize):
-    """(lattice, scaled_positions, numbers) | None."""
     return _get_worker().call(
         "std", (cell, scaled, numbers, symprec, to_primitive, no_idealize)
     )

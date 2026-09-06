@@ -1,5 +1,3 @@
-"""Half-block canvas tests."""
-
 import numpy as np
 import pytest
 import urwid
@@ -22,11 +20,6 @@ def _uniform(h, w, color=(10, 20, 30)):
 
 def _cache():
     return AttrSpecCache()
-
-
-# ------------------------------------------------------------------ #
-#  frame_to_canvas
-# ------------------------------------------------------------------ #
 
 
 def test_attr_run_lengths_are_bytes():
@@ -72,11 +65,6 @@ def test_canvas_matches_framebuffer_width():
         assert frame_to_canvas(_uniform(6, w), _cache()).cols() == w
 
 
-# ------------------------------------------------------------------ #
-#  AttrSpecCache
-# ------------------------------------------------------------------ #
-
-
 def test_cache_returns_identical_instances():
     cache = _cache()
     assert cache[0x123456789A] is cache[0x123456789A]
@@ -113,11 +101,6 @@ def test_set_colors_to_same_value_keeps_cache():
 def test_sixteen_color_depth_rejects_true_color():
     with pytest.raises(urwid.AttrSpecError):
         AttrSpecCache(colors=16)[0xFF000000]
-
-
-# ------------------------------------------------------------------ #
-#  HalfBlockCanvas
-# ------------------------------------------------------------------ #
 
 
 def _widget(source=None):

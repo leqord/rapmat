@@ -1,6 +1,3 @@
-"""Column TypeDecorators.
-"""
-
 import json
 from typing import Optional
 
@@ -12,9 +9,6 @@ from rapmat.storage._serde import ase_decode, ase_encode
 
 
 class AtomsJSON(TypeDecorator):
-    """ASE ``Atoms`` <-> ``ase.io.jsonio`` TEXT.
-    """
-
     impl = Text
     cache_ok = True
 
@@ -26,8 +20,6 @@ class AtomsJSON(TypeDecorator):
 
 
 class JSONDict(TypeDecorator):
-    """dict <-> JSON TEXT."""
-
     impl = Text
     cache_ok = True
 
@@ -39,9 +31,6 @@ class JSONDict(TypeDecorator):
 
 
 class IntBool(TypeDecorator):
-    """bool <-> INTEGER 0/1, ``NULL`` is ``False``.
-    """
-
     impl = Integer
     cache_ok = True
 
@@ -53,9 +42,6 @@ class IntBool(TypeDecorator):
 
 
 class OptIntBool(TypeDecorator):
-    """bool <-> INTEGER 0/1/NULL, ``NULL`` is ``None``.
-    """
-
     impl = Integer
     cache_ok = True
 

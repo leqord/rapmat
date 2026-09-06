@@ -13,10 +13,6 @@ from rapmat.core.entities import (
 )
 from rapmat.storage.status import StructureStatus
 
-# ------------------------------------------------------------------ #
-#  Store ABC
-# ------------------------------------------------------------------ #
-
 
 class StructureStore(ABC):
     @abstractmethod
@@ -57,7 +53,7 @@ class StructureStore(ABC):
 
     @abstractmethod
     def update_heartbeat(self, run_name: str, worker_id: str) -> None:
-        """Does nothing unless ``worker_id`` currently owns the run."""
+        ...
 
     @abstractmethod
     def set_run_status(self, run_name: str, status: str) -> None: ...
@@ -181,8 +177,6 @@ class StructureStore(ABC):
     def close(self) -> None: ...
 
     def vacuum(self) -> None:
-        """Reclaim free space if the backend supports it.
-        """
         return None
 
     @abstractmethod

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Callable
 
-# (key, label, priority)
 FooterHint = tuple[str, str, int]  
 
 PRIORITY_PINNED = 0

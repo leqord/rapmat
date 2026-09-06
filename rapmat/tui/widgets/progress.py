@@ -20,10 +20,6 @@ class ProgressPanel(urwid.WidgetWrap):
         outer = urwid.LineBox(urwid.Padding(body, left=1, right=1), title=title)
         super().__init__(outer)
 
-    # ------------------------------------------------------------------ #
-    #  Public API
-    # ------------------------------------------------------------------ #
-
     def set_progress(self, current: int, total: int, message: str = "") -> None:
         if total <= 0:
             total = 1

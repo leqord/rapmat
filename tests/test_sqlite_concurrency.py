@@ -1,6 +1,3 @@
-"""Concurrency and locking for the SQLite backend.
-"""
-
 import subprocess
 import sys
 import threading
@@ -26,7 +23,6 @@ def _setup_run(store, name="run"):
 
 
 def test_concurrent_claim_single_winner(store):
-    """N threads race to claim the same run, exactly one wins."""
     _setup_run(store, "race")
     n = 16
     barrier = threading.Barrier(n)
@@ -54,7 +50,6 @@ def test_concurrent_claim_single_winner(store):
 
 
 def test_concurrent_heartbeats_only_owner(store):
-    """Concurrent heartbeats from non-owners are ignored, the owner's sticky."""
     _setup_run(store, "hb")
     assert store.claim_run("hb", "owner")
 
@@ -90,8 +85,6 @@ def _try_open_in_subprocess(db_dir: Path) -> subprocess.CompletedProcess:
 
 
 def test_lockfile_rejects_second_opener(tmp_path):
-    """While one process holds the DB, a second opener is rejected. Once released,
-    it succeeds."""
     from rapmat.storage import SQLiteStore
 
     db_dir = tmp_path / "locked_db"

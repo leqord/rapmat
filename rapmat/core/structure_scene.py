@@ -1,6 +1,3 @@
-"""ASE Atoms -> Scene.
-"""
-
 from typing import Literal, Optional
 
 import numpy as np

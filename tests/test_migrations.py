@@ -1,5 +1,3 @@
-"""Alembic migration tests."""
-
 import sqlite3
 
 import pytest
@@ -50,7 +48,6 @@ _TABLES = {"study", "run", "structure", "evaluation", "phonon", "phonon_params"}
 
 
 def _make_legacy_db(db_dir, *, with_excluded: bool) -> str:
-    """Create a database exactly as the legacy raw-sqlite3 store would."""
     db_dir.mkdir(parents=True, exist_ok=True)
     db_file = db_dir / "rapmat.sqlite"
     conn = sqlite3.connect(db_file)
@@ -89,11 +86,6 @@ def _columns(db_file: str, table: str) -> set[str]:
         return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
 
 
-# ------------------------------------------------------------------ #
-#  Fresh databases
-# ------------------------------------------------------------------ #
-
-
 def test_fresh_db_created_at_head(tmp_path):
     store = SQLiteStore.from_path(tmp_path / "fresh")
     db_file = store.get_url()
@@ -119,11 +111,6 @@ def test_reopen_is_idempotent_and_preserves_data(tmp_path):
         assert _version(store2.get_url()) == "0004"
     finally:
         store2.close()
-
-
-# ------------------------------------------------------------------ #
-#  Legacy databases
-# ------------------------------------------------------------------ #
 
 
 @pytest.mark.parametrize("with_excluded", [False, True])
@@ -237,11 +224,6 @@ def test_legacy_orphans_swept(tmp_path):
         store.close()
 
 
-# ------------------------------------------------------------------ #
-#  Cascade deletes
-# ------------------------------------------------------------------ #
-
-
 def test_delete_run_cascades(tmp_path):
     store = SQLiteStore.from_path(tmp_path / "cascade_run")
     try:
@@ -287,11 +269,6 @@ def test_delete_study_cascades_transitively(tmp_path):
                 ), table
     finally:
         store.close()
-
-
-# ------------------------------------------------------------------ #
-#  Autogenerate cleanliness
-# ------------------------------------------------------------------ #
 
 
 def test_migrations_match_models(tmp_path):

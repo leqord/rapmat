@@ -30,10 +30,6 @@ class ScreenRouter:
         self._header_text = header_text
         self._stack: list[tuple[Screen, urwid.Widget]] = []
 
-    # ------------------------------------------------------------------ #
-    #  Public API
-    # ------------------------------------------------------------------ #
-
     @property
     def current(self) -> Screen | None:
         return self._stack[-1][0] if self._stack else None
@@ -74,10 +70,6 @@ class ScreenRouter:
             self._stack.append((screen, widget))
         self._frame.body = widget
         self._update_breadcrumb()
-
-    # ------------------------------------------------------------------ #
-    #  Internal helpers
-    # ------------------------------------------------------------------ #
 
     def _update_breadcrumb(self) -> None:
         if not self._stack:

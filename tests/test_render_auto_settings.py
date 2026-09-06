@@ -1,5 +1,3 @@
-"""Explodes?"""
-
 import sys
 
 import pytest

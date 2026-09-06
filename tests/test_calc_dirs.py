@@ -1,5 +1,3 @@
-"""Tests for per-calculation directory allocation and pruning."""
-
 from pathlib import Path, PurePosixPath
 from unittest.mock import patch
 
@@ -64,7 +62,6 @@ class TestSequence:
         assert alloc.next() == tmp_path / "r" / "2" / "0001"
 
     def test_repeating_a_label_does_not_restart(self, tmp_path):
-        """Regression"""
         alloc = CalcDirAllocator(tmp_path)
         alloc.set_label("r/1")
         first = alloc.next()
@@ -134,17 +131,12 @@ class TestPrune:
         alloc.finalize()
 
 
-# ------------------------------------------------------------------ #
-#  End-to-end
-# ------------------------------------------------------------------ #
-
-
 def _fake_vasp_class():
     from rapmat.calculators.vasp import RapmatVasp
 
     class FakeVasp(RapmatVasp):
         def initialize(self, atoms):
-            """No POTCARs."""
+            ...
 
         def calculate(self, atoms=None, properties=("energy",), system_changes=None):
             target = Path(self.directory)

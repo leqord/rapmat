@@ -2,8 +2,6 @@ import urwid
 
 
 class SubmitSearchEdit(urwid.Edit):
-    """Search field that submits its text on enter and exits on esc."""
-
     def __init__(self, on_search, on_exit) -> None:
         super().__init__(caption="Search: ")
         self._on_search = on_search
@@ -21,12 +19,6 @@ class SubmitSearchEdit(urwid.Edit):
 
 
 class LiveSearchEdit(urwid.Edit):
-    """Search field that re-filters on every keystroke.
-
-    Esc calls ``on_exit`` (caller cancels the filter), enter calls
-    ``on_submit`` if given (caller keeps the filter).
-    """
-
     def __init__(self, on_change, on_exit, on_submit=None) -> None:
         super().__init__(caption="Search: ")
         self._on_change = on_change

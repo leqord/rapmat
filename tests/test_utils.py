@@ -1,15 +1,9 @@
-"""Tests for utility functions: formula parsing, system parsing, thickness, SPG."""
-
 import pytest
 from ase import Atoms
 from ase.build import bulk, fcc111
 
 from rapmat.utils.common import (parse_formula, parse_system,)
 from rapmat.utils.structure import calculate_thickness, format_spg
-
-# ------------------------------------------------------------------ #
-#  parse_formula
-# ------------------------------------------------------------------ #
 
 
 class TestParseFormula:
@@ -29,11 +23,6 @@ class TestParseFormula:
     def test_fractional_raises(self):
         with pytest.raises(ValueError, match="integer"):
             parse_formula("Al0.5O1.5")
-
-
-# ------------------------------------------------------------------ #
-#  parse_system
-# ------------------------------------------------------------------ #
 
 
 class TestParseSystem:
@@ -60,10 +49,6 @@ class TestParseSystem:
         with pytest.raises(ValueError):
             parse_system("--")
 
-# ------------------------------------------------------------------ #
-#  calculate_thickness
-# ------------------------------------------------------------------ #
-
 
 class TestCalculateThickness:
     def test_slab_with_vacuum(self):
@@ -80,20 +65,9 @@ class TestCalculateThickness:
         assert calculate_thickness(single, axis=2) == 0.0
 
     def test_bulk_has_zero_thickness(self):
-        """Bulk structures with evenly distributed atoms have zero thickness.
-
-        The algorithm finds the largest gap, which for bulk is the full cell
-        (gap = 1.0), giving thickness = 0. This is correct: bulk has no
-        "slab thickness" in the sense of a 2D material.
-        """
         cu = bulk("Cu", "fcc", a=3.615)
         thickness = calculate_thickness(cu, axis=2)
         assert thickness == 0.0
-
-
-# ------------------------------------------------------------------ #
-#  format_spg
-# ------------------------------------------------------------------ #
 
 
 class TestFormatSpg:

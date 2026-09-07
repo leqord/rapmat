@@ -15,7 +15,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from rapmat.core.config import SearchConfig, merge_config_dicts
 from rapmat.core.entities import Candidate, PhononResult, RunMetadata
 from rapmat.storage.base import StructureStore
-from rapmat.storage.engine import make_engine, run_migrations
+from rapmat.storage.engine import (
+    DbPageStats,
+    full_vacuum,
+    incremental_vacuum,
+    make_engine,
+    page_stats,
+    run_migrations,
+)
 from rapmat.storage.models import (
     Evaluation,
     Phonon,
@@ -26,6 +33,9 @@ from rapmat.storage.models import (
 )
 from rapmat.storage.status import RunStatus, StructureStatus
 from rapmat.utils.console import get_logger
+
+
+_EXIT_VACUUM_MAX_PAGES = 20_000
 
 
 class SQLiteStore(StructureStore):
@@ -676,21 +686,22 @@ class SQLiteStore(StructureStore):
         with self._session() as s:
             return list(s.scalars(stmt).all())
 
-    def vacuum(self) -> None:
+    def storage_stats(self) -> DbPageStats:
         with self._lock:
-            with self._engine.connect() as conn:
-                conn.execution_options(isolation_level="AUTOCOMMIT")
-                conn.exec_driver_sql("VACUUM")
+            return page_stats(self._engine)
+
+    def vacuum(self) -> DbPageStats:
+        with self._lock:
+            full_vacuum(self._engine)
+            return page_stats(self._engine)
 
     def close(self) -> None:
         try:
             with self._lock:
-                with self._engine.connect() as conn:
-                    conn.execution_options(isolation_level="AUTOCOMMIT")
-                    conn.exec_driver_sql("PRAGMA incremental_vacuum")
+                incremental_vacuum(self._engine, _EXIT_VACUUM_MAX_PAGES)
                 self._engine.dispose()
         except Exception:
-            pass
+            get_logger("rapmat.storage").debug("on-close vacuum failed", exc_info=True)
 
         if hasattr(self, "_file_lock") and getattr(self._file_lock, "is_locked", False):
             try:

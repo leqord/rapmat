@@ -461,3 +461,79 @@ class TestResultsStructureView:
         depth = app._router.depth
         screen.keypress((), "enter")
         assert app._router.depth == depth
+
+
+class _RunningThread:
+    def is_alive(self) -> bool:
+        return True
+
+
+class TestDbSettingsCompact:
+    @staticmethod
+    def _screen(app_env):
+        state, app = app_env
+        screen = _make_screen("db_settings", state, app._router)
+        screen.build()
+        return state, screen
+
+    @staticmethod
+    def _status(screen) -> str:
+        return screen._status_text.get_text()[0]
+
+    def test_usage_section_reports_size(self, app_env):
+        _, screen = self._screen(app_env)
+
+        assert "Size:" in screen._usage_text.get_text()[0]
+        assert "Reclaimable:" in screen._usage_text.get_text()[0]
+
+    def test_compact_reports_nothing_to_reclaim(self, app_env):
+        state, screen = self._screen(app_env)
+        state.store.vacuum()
+
+        screen._on_compact(None)
+
+        assert "Nothing to reclaim" in self._status(screen)
+
+    def test_compact_asks_before_rebuilding(self, app_env):
+        from test_vacuum import _bloat
+
+        state, screen = self._screen(app_env)
+        _bloat(state.store._engine)
+        body_before = screen._frame.body
+
+        screen._on_compact(None)
+
+        assert screen._frame.body is not body_before
+
+    def test_compact_reports_what_it_freed(self, app_env):
+        from test_vacuum import _bloat
+
+        state, screen = self._screen(app_env)
+        _bloat(state.store._engine)
+        before = state.store.storage_stats().total_bytes
+
+        state.store.vacuum()
+        screen._on_compact_done(before)
+
+        status = self._status(screen)
+        assert "Compacted:" in status
+        assert "freed" in status
+        assert state.store.storage_stats().free_pages == 0
+
+    def test_compact_surfaces_errors(self, app_env):
+        _, screen = self._screen(app_env)
+
+        screen._on_compact_error("disk full")
+
+        assert "Compact failed: disk full" in self._status(screen)
+
+    def test_compact_refuses_while_one_is_running(self, app_env):
+        state, screen = self._screen(app_env)
+        screen._task = _dummy_task(state)
+        screen._task._progress.finished = False
+        screen._task._thread = _RunningThread()
+
+        screen._on_compact(None)
+
+        assert "Already compacting" in self._status(screen)
+

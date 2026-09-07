@@ -46,6 +46,13 @@ def format_timestamp(ts: str) -> str:
     return ts[:16].replace("T", " ")
 
 
+def format_bytes(size: float) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if abs(size) < 1024.0 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024.0
+
+
 def free_cuda_memory() -> None:
     try:
         import torch

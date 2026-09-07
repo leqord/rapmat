@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Callable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 
 from ase import Atoms
 
@@ -12,6 +12,9 @@ from rapmat.core.entities import (
     Study,
 )
 from rapmat.storage.status import StructureStatus
+
+if TYPE_CHECKING:
+    from rapmat.storage.engine import DbPageStats
 
 
 class StructureStore(ABC):
@@ -176,7 +179,10 @@ class StructureStore(ABC):
     @abstractmethod
     def close(self) -> None: ...
 
-    def vacuum(self) -> None:
+    def vacuum(self) -> "Optional[DbPageStats]":
+        return None
+
+    def storage_stats(self) -> "Optional[DbPageStats]":
         return None
 
     @abstractmethod

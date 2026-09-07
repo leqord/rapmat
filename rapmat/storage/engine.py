@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 from alembic import command
@@ -9,6 +10,26 @@ _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 _BASELINE_PRE_EXCLUDED = "0001"
 _BASELINE_WITH_EXCLUDED = "0002"
+
+
+@dataclass(frozen=True)
+class DbPageStats:
+    page_size: int
+    page_count: int
+    free_pages: int
+    auto_vacuum: int
+
+    @property
+    def total_bytes(self) -> int:
+        return self.page_size * self.page_count
+
+    @property
+    def reclaimable_bytes(self) -> int:
+        return self.page_size * self.free_pages
+
+    @property
+    def reclaimable_fraction(self) -> float:
+        return self.free_pages / self.page_count if self.page_count else 0.0
 
 
 def _set_sqlite_pragmas(dbapi_conn, _record) -> None:
@@ -44,6 +65,49 @@ def _raw_pragma(engine: Engine, sql: str) -> None:
         raw.driver_connection.execute(sql)
     finally:
         raw.close()
+
+
+def _raw_fetch(engine: Engine, sql: str) -> list:
+    raw = engine.raw_connection()
+    try:
+        cur = raw.driver_connection.cursor()
+        try:
+            cur.execute(sql)
+            return cur.fetchall()
+        finally:
+            cur.close()
+    finally:
+        raw.close()
+
+
+def _raw_scalar(engine: Engine, sql: str) -> int:
+    rows = _raw_fetch(engine, sql)
+    return int(rows[0][0]) if rows else 0
+
+
+def page_stats(engine: Engine) -> DbPageStats:
+    return DbPageStats(
+        page_size=_raw_scalar(engine, "PRAGMA page_size"),
+        page_count=_raw_scalar(engine, "PRAGMA page_count"),
+        free_pages=_raw_scalar(engine, "PRAGMA freelist_count"),
+        auto_vacuum=_raw_scalar(engine, "PRAGMA auto_vacuum"),
+    )
+
+
+def incremental_vacuum(engine: Engine, max_pages: int | None = None) -> int:
+    free = _raw_scalar(engine, "PRAGMA freelist_count")
+    if free <= 0:
+        return 0
+    budget = free if max_pages is None else min(free, max_pages)
+    if budget <= 0:
+        return 0
+    _raw_fetch(engine, f"PRAGMA incremental_vacuum({budget})")
+    return free - _raw_scalar(engine, "PRAGMA freelist_count")
+
+
+def full_vacuum(engine: Engine) -> None:
+    _raw_pragma(engine, "PRAGMA auto_vacuum=INCREMENTAL")
+    _raw_pragma(engine, "VACUUM")
 
 
 def _alembic_config(connection) -> Config:

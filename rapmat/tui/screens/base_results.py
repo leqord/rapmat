@@ -1017,7 +1017,7 @@ class BaseResultsScreen(ScreenBase):
                 help="Filter rows by a search string", priority=10,
             ),
             KeyBinding(
-                ("enter",), "3D", self._action_view_3d,
+                ("enter",), "View", self._action_view_3d,
                 help="Open the 3D structure viewer",
                 priority=18,
             ),

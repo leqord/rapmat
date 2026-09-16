@@ -147,15 +147,6 @@ class DbSettingsScreen(ScreenBase):
                 ("pack", urwid.Text(("section", " Disk Usage"))),
                 ("pack", self._usage_text),
                 ("pack", compact_btn),
-                (
-                    "pack",
-                    urwid.Text(
-                        (
-                            "details",
-                            "  The file will be rebuilt to release deleted rows."
-                        )
-                    ),
-                ),
                 ("pack", urwid.Divider()),
                 ("pack", self._status_text),
                 ("pack", urwid.Divider()),

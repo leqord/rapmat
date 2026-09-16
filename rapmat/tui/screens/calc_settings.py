@@ -44,7 +44,7 @@ class CalcSettingsScreen(ScreenBase):
         self._path_edit = urwid.Edit(edit_text=current)
         path_row = urwid.Columns(
             [
-                (14, urwid.Text(("form_label", "Workdirs root:"), align="right")),
+                (14, urwid.Text(("form_label", "  Workdirs root:"), align="right")),
                 (
                     "weight",
                     1,

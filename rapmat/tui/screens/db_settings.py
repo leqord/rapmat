@@ -86,7 +86,7 @@ class DbSettingsScreen(ScreenBase):
         self._path_edit = urwid.Edit(edit_text=self._effective_path())
         path_row = urwid.Columns(
             [
-                (14, urwid.Text(("form_label", "Data path:"), align="right")),
+                (12, urwid.Text(("form_label", "Data path:"), align="right")),
                 (
                     "weight",
                     1,

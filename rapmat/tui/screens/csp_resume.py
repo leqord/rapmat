@@ -133,7 +133,10 @@ class CSPResumeScreen(ScreenBase):
             return
 
         if not store.claim_run(run_name, wid):
-            progress.fail(f"Run '{run_name}' is locked by another worker")
+            progress.fail(
+                f"Run '{run_name}' is still running. Wait for it to stop, "
+                "then resume."
+            )
             return
 
         execute_run(

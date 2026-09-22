@@ -40,20 +40,12 @@ _EXIT_VACUUM_MAX_PAGES = 20_000
 
 class SQLiteStore(StructureStore):
 
-    def __init__(
-        self,
-        db_file: str | Path,
-        *,
-        reclaim_stale_minutes: int | None = 10,
-    ):
+    def __init__(self, db_file: str | Path):
         self._db_file = str(db_file)
         self._lock = threading.RLock()
         self._engine = make_engine(self._db_file)
         run_migrations(self._engine)
         self._Session = sessionmaker(self._engine, expire_on_commit=False)
-
-        if reclaim_stale_minutes is not None:
-            self.reclaim_stale_runs(timeout_minutes=reclaim_stale_minutes)
 
     @classmethod
     def from_path(cls, db_path: Path, **kwargs) -> "SQLiteStore":
@@ -71,6 +63,12 @@ class SQLiteStore(StructureStore):
 
         instance = cls(db_path / "rapmat.sqlite", **kwargs)
         instance._file_lock = file_lock
+
+        recovered = instance.recover_orphaned_runs()
+        if recovered:
+            get_logger("rapmat.storage").info(
+                "Marked orphaned runs as interrupted: %s", ", ".join(recovered)
+            )
         return instance
 
     def get_url(self) -> Optional[str]:
@@ -264,6 +262,23 @@ class SQLiteStore(StructureStore):
                 )
                 .values(
                     run_status=str(RunStatus.PENDING),
+                    worker_id=None,
+                    heartbeat=None,
+                )
+                .returning(Run.name)
+            ).all()
+            s.commit()
+        return list(names)
+
+    def recover_orphaned_runs(self) -> list[str]:
+        """Release every active run. Only valid because we're holding the DB file lock for the sqlite case."""
+        active = [str(RunStatus.PROCESSING), str(RunStatus.GENERATING)]
+        with self._session() as s:
+            names = s.scalars(
+                update(Run)
+                .where(Run.run_status.in_(active))
+                .values(
+                    run_status=str(RunStatus.INTERRUPTED),
                     worker_id=None,
                     heartbeat=None,
                 )

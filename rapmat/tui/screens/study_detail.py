@@ -77,10 +77,6 @@ class StudyDetailScreen(ScreenBase):
                 help="Duplicate analysis", priority=40,
             ),
             KeyBinding(
-                ("u",), "Unlock Run", self._unlock_focused,
-                help="Release the focused run's worker lock", priority=50,
-            ),
-            KeyBinding(
                 ("delete",), "Remove", self._delete_focused,
                 help="Delete the run", priority=60,
             ),
@@ -126,9 +122,8 @@ class StudyDetailScreen(ScreenBase):
             run_type = _classify_run(run, elements)
 
             st = run.run_status or "pending"
-            wid = run.worker_id
-            if wid and st in ("generating", "processing"):
-                st = f"active({wid[:4]})"
+            if run.worker_id and st in ("generating", "processing"):
+                st = "running"
 
             d = run.model_dump()
             d["_formula"] = _formula_str(run)
@@ -223,13 +218,6 @@ class StudyDetailScreen(ScreenBase):
 
         self._router.push(ResultsScreen(self._state, self._router))
 
-    def _on_unlock_run(self, run_name: str) -> None:
-        from rapmat.storage.status import RunStatus
-
-        self._state.store.release_run(run_name, RunStatus.PENDING)
-        if self._placeholder:
-            self._placeholder.original_widget = self._build_widget()
-
     def _dialog_host_get(self) -> "urwid.Widget | None":
         return (
             self._placeholder.original_widget
@@ -248,7 +236,7 @@ class StudyDetailScreen(ScreenBase):
 
         msg = f"Are you sure you want to permanently delete run '{run_name}'?"
         if is_active:
-            msg += f"\n\nWARNING: This run appears to be claimed and being processed right now by the {worker_id[:4]} worker"
+            msg += "\n\nWARNING: This run is still running."
 
         def _confirmed() -> None:
             self._state.store.delete_run(run_name)
@@ -275,11 +263,6 @@ class StudyDetailScreen(ScreenBase):
             from rapmat.tui.screens.csp_resume import CSPResumeScreen
 
             self._router.push(CSPResumeScreen(self._state, self._router))
-
-    def _unlock_focused(self) -> None:
-        run_name = self._focused_run_name()
-        if run_name:
-            self._on_unlock_run(run_name)
 
     def _go_phase_analysis(self) -> None:
         from rapmat.tui.screens.hull import PhaseAnalysisScreen

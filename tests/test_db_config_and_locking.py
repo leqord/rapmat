@@ -213,6 +213,52 @@ class TestRunLocking:
         assert meta.run_status == "generating"
         assert meta.worker_id == "w1"
 
+    def test_reopen_recovers_orphaned_run(self, tmp_path):
+        db_dir = tmp_path / "orphan_db"
+        store = SQLiteStore.from_path(db_dir)
+        store.create_study(
+            study_id="orphan",
+            system="Test",
+            domain="bulk",
+            calculator="MATTERSIM",
+            config={},
+        )
+        store.create_run(name="orphan", worker_id="w1", study_id="orphan")
+        assert store.claim_run("orphan", "w1")
+        store.close()
+
+        store = SQLiteStore.from_path(db_dir)
+        try:
+            meta = store.get_run_metadata("orphan")
+            assert meta.run_status == "interrupted"
+            assert meta.worker_id is None
+            assert store.claim_run("orphan", "w2")
+        finally:
+            store.close()
+
+    def test_reopen_leaves_finished_runs(self, tmp_path):
+        db_dir = tmp_path / "finished_db"
+        store = SQLiteStore.from_path(db_dir)
+        store.create_study(
+            study_id="fin",
+            system="Test",
+            domain="bulk",
+            calculator="MATTERSIM",
+            config={},
+        )
+        for name, status in (("done", "completed"), ("broken", "failed")):
+            store.create_run(name=name, worker_id="w1", study_id="fin")
+            store.claim_run(name, "w1")
+            store.release_run(name, status)
+        store.close()
+
+        store = SQLiteStore.from_path(db_dir)
+        try:
+            assert store.get_run_metadata("done").run_status == "completed"
+            assert store.get_run_metadata("broken").run_status == "failed"
+        finally:
+            store.close()
+
     def test_create_run_without_worker(self, store):
         store.create_study(
             study_id="no-w-run",

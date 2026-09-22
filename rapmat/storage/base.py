@@ -159,6 +159,7 @@ class StructureStore(ABC):
         energy_per_atom: float,
         energy_total: float,
         min_phonon_freq: Optional[float] = None,
+        deviations: Optional[str] = None,
     ) -> str: ...
 
     @abstractmethod

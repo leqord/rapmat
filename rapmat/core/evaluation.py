@@ -30,6 +30,41 @@ def evaluation_config_key(
     return json.dumps(config, sort_keys=True)
 
 
+class EvalLoopSummary(BaseModel):
+    evaluated: int = 0
+    failed: int = 0
+    run_deviations: str = ""
+    deviated: dict[str, str] = {}
+
+    def describe(self) -> str:
+        total = self.evaluated + self.failed
+        parts = []
+
+        if self.deviated:
+            counts: dict[str, int] = {}
+            for text in self.deviated.values():
+                counts[text] = counts.get(text, 0) + 1
+            listed = ", ".join(
+                f"{text} ({n})" for text, n in sorted(counts.items())
+            )
+            parts.append(
+                f"{len(self.deviated)} of {total} evaluations used deviated "
+                f"settings: {listed}"
+            )
+
+        if self.run_deviations:
+            parts.append(f"run-level deviation: {self.run_deviations}")
+
+        if self.failed:
+            plural = "" if self.failed == 1 else "s"
+            parts.append(f"{self.failed} structure{plural} failed")
+
+        if not parts:
+            return f"{self.evaluated} evaluations, no settings deviations"
+
+        return ". ".join(parts)
+
+
 class ComparisonRow(BaseModel):
     id: str = ""
     formula: str = ""
@@ -57,17 +92,24 @@ def run_eval_loop(
     log_callback=None,
     reduce_to_primitive: bool = True,
     symprec: float = 1e-3,
-) -> None:
-    from rapmat.calculators import cleanup_calculator_files
+) -> EvalLoopSummary:
     from rapmat.calculators.factory import (finalize_provider,
+                                            provider_deviations,
+                                            provider_last_directory,
                                             set_provider_label)
     from rapmat.calculators.vasp import preflight_potcars
+    from rapmat.calculators.vasp_recovery import (evaluate_with_recovery,
+                                                  format_deviations, warn)
     from rapmat.core.phonon import calculate_min_phonon_freq
     from rapmat.utils.console import get_logger
     logger = get_logger("rapmat.evaluation")
 
     if pending:
         preflight_potcars(calculator_for(pending[0].atoms), pending[0].atoms)
+
+    summary = EvalLoopSummary(
+        run_deviations=format_deviations(provider_deviations(calculator_for))
+    )
 
     n_total = len(pending)
     for i, rec in enumerate(pending, 1):
@@ -77,11 +119,14 @@ def run_eval_loop(
         set_provider_label(calculator_for, rec.id)
 
         try:
-            calculator = calculator_for(atoms)
-            cleanup_calculator_files(calculator)
-            atoms.calc = calculator
-
-            ref_energy = atoms.get_potential_energy()
+            ref_energy = evaluate_with_recovery(
+                atoms,
+                calculator_for,
+                lambda a: a.get_potential_energy(),
+                label=rec.id,
+                log_callback=log_callback,
+            )
+            calculator = atoms.calc
             ref_epa = ref_energy / len(atoms)
 
             ref_phonon_freq = None
@@ -99,6 +144,7 @@ def run_eval_loop(
                     log_callback=log_callback,
                 )
 
+            deviations = format_deviations(provider_deviations(calculator_for))
             store.add_evaluation(
                 structure_id=rec.id,
                 run_name=run_name,
@@ -107,8 +153,13 @@ def run_eval_loop(
                 energy_per_atom=ref_epa,
                 energy_total=ref_energy,
                 min_phonon_freq=ref_phonon_freq,
+                deviations=deviations or None,
             )
+            summary.evaluated += 1
+            if deviations:
+                summary.deviated[rec.id] = deviations
         except Exception as e:
+            summary.failed += 1
             import traceback
             import os
             from pathlib import Path
@@ -118,7 +169,9 @@ def run_eval_loop(
                 log_callback(err_msg)
                 log_callback(traceback.format_exc())
 
-                calc_dir = getattr(calculator, "directory", None)
+                calc_dir = provider_last_directory(calculator_for) or getattr(
+                    calculator, "directory", None
+                )
                 if calc_dir and os.path.exists(calc_dir):
                     for out_file in ["vasp.out", "OUTCAR"]:
                         fpath = Path(calc_dir) / out_file
@@ -138,6 +191,15 @@ def run_eval_loop(
             progress_callback(i, n_total, f"Evaluated {i}/{n_total}")
 
     finalize_provider(calculator_for)
+
+    if summary.deviated or summary.run_deviations:
+        warn(log_callback, summary.describe())
+    elif log_callback:
+        log_callback(summary.describe())
+    else:
+        logger.info("%s", summary.describe())
+
+    return summary
 
 
 def compute_ranking_metrics(

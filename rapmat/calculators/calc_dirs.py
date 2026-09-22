@@ -54,6 +54,10 @@ class CalcDirAllocator:
         return self._root is not None
 
     @property
+    def current(self) -> Path | None:
+        return self._previous
+
+    @property
     def scope_path(self) -> Path | None:
         if self._root is None:
             return None

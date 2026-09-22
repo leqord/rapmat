@@ -198,6 +198,7 @@ class Evaluation(Base):
     energy_per_atom: Mapped[float] = mapped_column(Float, nullable=True)
     energy_total: Mapped[float] = mapped_column(Float, nullable=True)
     min_phonon_freq: Mapped[Optional[float]] = mapped_column(Float)
+    deviations: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class Phonon(Base):

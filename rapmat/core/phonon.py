@@ -13,6 +13,8 @@ def structure_calculate_phonons(
     qpoint_mesh: Tuple[int, int, int],
     progress_callback=None,
     calculator_for=None,
+    log_callback=None,
+    log_label: str | None = None,
 ) -> Phonopy:
     if atoms.calc is None:
         raise RuntimeError("No calculator set for the structure.")
@@ -49,7 +51,7 @@ def structure_calculate_phonons(
                 0, 0, f"Processing deformed structure {counter}/{len(supercells)}"
             )
 
-        # NOTE: no cleanup here
+        # NOTE: cleanup
         ase_cell = Atoms(
             symbols=phonopy_cell.symbols,
             positions=phonopy_cell.positions,
@@ -57,11 +59,22 @@ def structure_calculate_phonons(
             pbc=True,
         )
 
-        ase_cell.calc = (
-            atoms.calc if calculator_for is None else calculator_for(ase_cell)
-        )
+        if calculator_for is None:
+            ase_cell.calc = atoms.calc
+            forces = ase_cell.get_forces()
+        else:
+            from rapmat.calculators.vasp_recovery import evaluate_with_recovery
 
-        forces = ase_cell.get_forces()
+            forces = evaluate_with_recovery(
+                ase_cell,
+                calculator_for,
+                lambda cell: cell.get_forces(),
+                label=(
+                    f"{log_label} " if log_label else ""
+                ) + f"displacement {counter}/{len(supercells)}",
+                log_callback=log_callback,
+            )
+
         sets_of_forces.append(forces)
 
     phonons.forces = np.array(sets_of_forces)
@@ -101,6 +114,8 @@ def calculate_phonons_with_freq(
         qpoint_mesh=qpoint_mesh,
         progress_callback=progress_callback,
         calculator_for=calculator_for,
+        log_callback=log_callback,
+        log_label=log_label,
     )
     return phonons, get_mesh_min_frequency(phonons)
 

@@ -418,3 +418,56 @@ def test_set_study_config_value_leaves_runs_untouched(store):
     assert store.get_study("s").config.get("phonon_cutoff") == -0.1
     assert read_batch_config(store, "r") == {"formula": {"Si": 1}}
     assert store.get_run_metadata("r").search_config.phonon_cutoff == -0.1
+
+
+def _seed_evaluation_run(store):
+    from conftest import add_relaxed_structure
+
+    store.create_study("s", "Si", "bulk", "VASP", config={})
+    store.create_run(name="r", study_id="s")
+    add_relaxed_structure(store, "r", bulk("Si", "diamond", a=5.43), -5.0, "r/1")
+
+
+def test_add_evaluation_accepts_six_positional_args(store):
+    _seed_evaluation_run(store)
+
+    store.add_evaluation("r/1", "r", "emt", "{}", -5.0, -10.0)
+
+    assert store.get_evaluations("r")[0].deviations is None
+
+
+def test_deviations_round_trip(store):
+    _seed_evaluation_run(store)
+
+    store.add_evaluation(
+        structure_id="r/1",
+        run_name="r",
+        calculator="VASP",
+        config_json="{}",
+        energy_per_atom=-5.0,
+        energy_total=-10.0,
+        deviations="ISMEAR=0, ISYM=0",
+    )
+
+    assert store.get_evaluations("r")[0].deviations == "ISMEAR=0, ISYM=0"
+
+
+def test_an_empty_deviation_is_stored_as_null(store):
+    _seed_evaluation_run(store)
+
+    store.add_evaluation("r/1", "r", "VASP", "{}", -5.0, -10.0, None, "")
+
+    assert store.get_evaluations("r")[0].deviations is None
+
+
+def test_upsert_clears_a_stale_deviation(store):
+    _seed_evaluation_run(store)
+
+    store.add_evaluation("r/1", "r", "VASP", "{}", -5.0, -10.0, None, "ISYM=0")
+    assert store.get_evaluations("r")[0].deviations == "ISYM=0"
+
+    store.add_evaluation("r/1", "r", "VASP", "{}", -5.0, -10.0)
+
+    evaluations = store.get_evaluations("r")
+    assert len(evaluations) == 1
+    assert evaluations[0].deviations is None

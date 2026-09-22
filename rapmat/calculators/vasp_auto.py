@@ -25,7 +25,16 @@ SINGLE_POINT_OVERRIDES = {
 
 VACUUM_AXIS = 2
 
+MONOLAYER_ISMEAR = 0
+MPRELAXSET_ISMEAR = -5
+
 _LDAU_KEYS = ("LDAUL", "LDAUU", "LDAUJ")
+
+
+def monolayer_ismear_notice() -> str:
+    return (
+        f"monolayer run: ISMEAR={MONOLAYER_ISMEAR} (Gaussian) applied."
+    )
 
 
 def pymatgen_version() -> str:
@@ -99,6 +108,7 @@ def omat24_vasp_params(
     kpts = [int(k) for k in input_set.kpoints.kpts[0]]
     if monolayer:
         kpts[VACUUM_AXIS] = 1
+        incar["ISMEAR"] = MONOLAYER_ISMEAR
 
     params = {
         key.lower(): value
@@ -180,7 +190,25 @@ def describe_params(params: dict) -> str:
     if hubbard:
         parts.append("U " + ", ".join(hubbard))
 
+    deviations = describe_deviations(params)
+    if deviations:
+        parts.append(f"deviation: {deviations}")
+
     return " | ".join(parts)
+
+
+def describe_deviations(params: dict) -> str:
+    listed = []
+
+    ismear = params.get("ismear")
+    if ismear is not None and int(ismear) != MPRELAXSET_ISMEAR:
+        listed.append(f"ISMEAR={ismear:g}")
+
+    for label, key in (("ISYM", "isym"), ("SYMPREC", "symprec")):
+        if params.get(key) is not None:
+            listed.append(f"{label}={params[key]:g}")
+
+    return ", ".join(listed)
 
 
 def export_toml(params: dict, label: str = "") -> str:
@@ -199,6 +227,10 @@ def export_toml(params: dict, label: str = "") -> str:
         if version != OMAT24_POTCAR_VERSION:
             line += f" (OMat24 specifies {potcar_set_name(OMAT24_POTCAR_VERSION)})"
         header.append(line)
+
+    deviations = describe_deviations(params)
+    if deviations:
+        header.append(f"# deviates from the OMat24 protocol: {deviations}")
 
     header += ["", ""]
     return "\n".join(header) + tomli_w.dumps(_toml_safe(params))

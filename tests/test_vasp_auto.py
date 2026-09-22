@@ -5,8 +5,11 @@ from ase import Atoms
 from ase.build import bulk, mx2
 from ase.calculators.vasp import Vasp
 
-from rapmat.calculators.vasp_auto import (OMAT24_POTCAR_VERSION,
+from rapmat.calculators.vasp_auto import (MONOLAYER_ISMEAR,
+                                          MPRELAXSET_ISMEAR,
+                                          OMAT24_POTCAR_VERSION,
                                           describe_params, export_toml,
+                                          monolayer_ismear_notice,
                                           omat24_vasp_params)
 from rapmat.calculators.vasp import build_calculator_vasp
 
@@ -89,6 +92,35 @@ class TestKpoints:
         atoms = mx2("MoS2", vacuum=1.0)
         assert omat24_vasp_params(atoms, monolayer=False)["kpts"][2] > 1
         assert omat24_vasp_params(atoms, monolayer=True)["kpts"][2] == 1
+
+
+class TestSmearing:
+    def test_bulk_stays_bit_identical_to_mprelaxset(self, si):
+        params = omat24_vasp_params(si)
+        assert params["ismear"] == MPRELAXSET_ISMEAR
+        assert params["sigma"] == 0.05
+        assert "isym" not in params
+        assert "symprec" not in params
+
+    def test_monolayer_switches_to_gaussian(self):
+        atoms = mx2("MoS2", vacuum=10.0)
+        params = omat24_vasp_params(atoms, monolayer=True)
+        assert params["ismear"] == MONOLAYER_ISMEAR
+        assert params["sigma"] == 0.05
+
+    def test_monolayer_changes_nothing_else(self):
+        atoms = mx2("MoS2", vacuum=10.0)
+        bulk_params = omat24_vasp_params(atoms, monolayer=False)
+        mono_params = omat24_vasp_params(atoms, monolayer=True)
+
+        ignored = {"ismear", "kpts"}
+        assert {k: v for k, v in bulk_params.items() if k not in ignored} ==                {k: v for k, v in mono_params.items() if k not in ignored}
+
+    def test_the_notice_names_both_settings(self):
+        text = monolayer_ismear_notice()
+        assert "ISMEAR=0" in text
+        assert "tetrahedron" in text
+        assert "OMat24" in text
 
 
 class TestMagmom:
@@ -195,6 +227,18 @@ class TestDescribeParams:
     def test_omits_u_when_absent(self, si):
         assert "U " not in describe_params(omat24_vasp_params(si))
 
+    def test_reports_a_monolayer_deviation(self):
+        text = describe_params(omat24_vasp_params(mx2("MoS2", vacuum=10.0),
+                                                  monolayer=True))
+        assert "deviation: ISMEAR=0" in text
+
+    def test_no_deviation_reported_for_bulk(self, si):
+        assert "deviation" not in describe_params(omat24_vasp_params(si))
+
+    def test_reports_a_recovery_override(self, si):
+        params = {**omat24_vasp_params(si), "isym": 0}
+        assert "deviation: ISYM=0" in describe_params(params)
+
     def test_reports_potcar_setup(self, fe):
         assert "Fe_pv" in describe_params(omat24_vasp_params(fe))
 
@@ -209,6 +253,14 @@ class TestExportToml:
     def test_header_records_the_potcar_set(self, si):
         text = export_toml(omat24_vasp_params(si))
         assert "POTCAR set: potpaw_PBE.54" in text
+
+    def test_header_flags_a_monolayer_deviation(self):
+        text = export_toml(omat24_vasp_params(mx2("MoS2", vacuum=10.0),
+                                              monolayer=True))
+        assert "# deviates from the OMat24 protocol: ISMEAR=0" in text
+
+    def test_header_is_clean_for_bulk(self, si):
+        assert "deviates from" not in export_toml(omat24_vasp_params(si))
 
     def test_header_flags_a_non_omat24_potcar_set(self, si):
         text = export_toml(omat24_vasp_params(si, potcar_version=""))

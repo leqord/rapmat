@@ -26,6 +26,9 @@ class CalculatorProvider:
         self._log_callback = log_callback
         self._cached = None
         self._potcar_version = None
+        self._overrides: dict = {}
+        self._run_deviations: dict = {}
+        self._label_seen = None
 
         # NOTE: Only VASP writes to disk
         self._dirs = CalcDirAllocator(
@@ -40,11 +43,19 @@ class CalculatorProvider:
                 )
 
         if self._auto:
-            from rapmat.calculators.vasp_auto import resolve_potcar_version
+            from rapmat.calculators.vasp_auto import (MONOLAYER_ISMEAR,
+                                                      monolayer_ismear_notice,
+                                                      resolve_potcar_version)
 
             self._potcar_version, note = resolve_potcar_version()
             if note and log_callback:
                 log_callback(note)
+
+            if self._monolayer:
+                self._run_deviations = {"ismear": MONOLAYER_ISMEAR}
+                from rapmat.calculators.vasp_recovery import warn
+
+                warn(log_callback, monolayer_ismear_notice())
 
     @property
     def auto(self) -> bool:
@@ -55,15 +66,52 @@ class CalculatorProvider:
         return self._dirs.scope_path
 
     def set_calc_label(self, label) -> None:
+        # NOTE: label has to be normalised exactly as the allocator does this
+        normalized = None if label is None else str(label)
+        if normalized != self._label_seen:
+            self._overrides = {}
+        self._label_seen = normalized
         self._dirs.set_label(label)
 
     def finalize(self) -> None:
         self._dirs.finalize()
 
+    def apply_overrides(self, patch: dict) -> None:
+        from rapmat.calculators.vasp_recovery import RECOVERY_KEYS
+
+        forbidden = set(patch) - RECOVERY_KEYS
+        if forbidden:
+            raise ValueError(
+                f"recovery may not change {sorted(forbidden)}; "
+                f"only {sorted(RECOVERY_KEYS)} are recoverable"
+            )
+        self._overrides.update(patch)
+
+    @property
+    def overrides(self) -> dict:
+        return dict(self._overrides)
+
+    @property
+    def deviations(self) -> dict:
+        return {**self._run_deviations, **self._overrides}
+
+    @property
+    def pinned_recovery_keys(self) -> frozenset:
+        from rapmat.calculators.vasp_recovery import RECOVERY_KEYS
+
+        return frozenset(key for key in RECOVERY_KEYS if key in self._config)
+
+    @property
+    def last_directory(self):
+        return self._dirs.current
+
     def __call__(self, atoms):
         directory = self._dirs.next()
 
         if not self._auto:
+            if self._overrides:
+                # NOTE: do not mutate the shared instance
+                return self._build({**self._config, **self._overrides}, directory)
             if self._cached is None:
                 self._cached = self._build(self._config, directory)
             elif directory is not None:
@@ -78,11 +126,12 @@ class CalculatorProvider:
             monolayer=self._monolayer,
             potcar_version=self._potcar_version,
         )
+        merged = {**self._config, **params, **self._overrides}
         if self._log_callback:
             self._log_callback(
-                f"{atoms.get_chemical_formula()}: {describe_params(params)}"
+                f"{atoms.get_chemical_formula()}: {describe_params(merged)}"
             )
-        return self._build({**self._config, **params}, directory)
+        return self._build(merged, directory)
 
     def reset(self) -> None:
         self._cached = None
@@ -106,6 +155,30 @@ def finalize_provider(calculator_for) -> None:
     finalizer = getattr(calculator_for, "finalize", None)
     if callable(finalizer):
         finalizer()
+
+
+def apply_provider_overrides(calculator_for, patch: dict) -> bool:
+    applier = getattr(calculator_for, "apply_overrides", None)
+    if not callable(applier):
+        return False
+    applier(patch)
+    return True
+
+
+def provider_overrides(calculator_for) -> dict:
+    return dict(getattr(calculator_for, "overrides", None) or {})
+
+
+def provider_deviations(calculator_for) -> dict:
+    return dict(getattr(calculator_for, "deviations", None) or {})
+
+
+def provider_pinned_keys(calculator_for) -> frozenset:
+    return frozenset(getattr(calculator_for, "pinned_recovery_keys", None) or ())
+
+
+def provider_last_directory(calculator_for):
+    return getattr(calculator_for, "last_directory", None)
 
 
 def load_calculator(

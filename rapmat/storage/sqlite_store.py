@@ -631,6 +631,7 @@ class SQLiteStore(StructureStore):
         energy_per_atom: float,
         energy_total: float,
         min_phonon_freq: Optional[float] = None,
+        deviations: Optional[str] = None,
     ) -> str:
         eval_id = _eval_id(structure_id, calculator, config_json)
         values = {
@@ -644,6 +645,7 @@ class SQLiteStore(StructureStore):
             "min_phonon_freq": (
                 float(min_phonon_freq) if min_phonon_freq is not None else None
             ),
+            "deviations": deviations or None,
         }
         with self._session() as s:
             stmt = sqlite_insert(Evaluation).values(**values)

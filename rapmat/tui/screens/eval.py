@@ -52,6 +52,7 @@ class EvalResultsScreen(BaseResultsScreen):
         phonon_cutoff: float,
         stable_only: bool,
         run_name: str,
+        deviations: dict[str, str] | None = None,
     ) -> None:
         super().__init__(state, router)
 
@@ -59,6 +60,7 @@ class EvalResultsScreen(BaseResultsScreen):
         self._eval_rows = eval_rows
         self._phonon_cutoff = phonon_cutoff
         self._stable_only = stable_only
+        self._deviations = dict(deviations or {})
         self._run_name = run_name
         self._ranking: dict = {}
         self._stability: dict | None = None
@@ -168,6 +170,14 @@ class EvalResultsScreen(BaseResultsScreen):
                 ("details", f" (P={s['precision']:.2f}, R={s['recall']:.2f})"),
             ])
 
+        if self._deviations:
+            if metric_parts:
+                metric_parts.append(("details", "  |  "))
+            metric_parts.extend([
+                ("form_label", "Deviated: "),
+                ("unconv", f"{len(self._deviations)}/{self._n_total}"),
+            ])
+
         if metric_parts:
             header_parts.append(("details", "  |  "))
             header_parts.extend(metric_parts)
@@ -183,6 +193,8 @@ class EvalResultsScreen(BaseResultsScreen):
             cols.extend(_DYN_COLS)
         if self._show_duplicate_col:
             cols.append(("Dup", 5))
+        if self._deviations:
+            cols.append(("Dev", 18))
         return cols
 
     def _fmt_dyn(self, val: float | None) -> str:
@@ -215,6 +227,8 @@ class EvalResultsScreen(BaseResultsScreen):
             row.append(self._fmt_dyn(r.ref_phonon_freq))
         if self._show_duplicate_col:
             row.append(_yes_no(r.duplicate, na=""))
+        if self._deviations:
+            row.append(self._deviations.get(r.structure_id, ""))
         return row
 
     def _attr_fn(self, r) -> str:
@@ -286,6 +300,7 @@ class EvalScreen(ScreenBase):
         self._progress_panel = ProgressPanel(title=" Evaluation Progress ")
         self._running = False
         self._eval_rows: list["ResultRow"] = []
+        self._eval_deviations: dict[str, str] = {}
         self._records: list["Structure"] = []
         self._eval_vals: dict | None = None
 
@@ -471,12 +486,15 @@ class EvalScreen(ScreenBase):
         meta = store.get_run_metadata(run_name)
         monolayer = bool(meta and meta.domain == "monolayer")
         if auto_settings:
-            from rapmat.calculators.vasp_auto import pymatgen_version
+            from rapmat.calculators.vasp_auto import (monolayer_ismear_notice,
+                                                      pymatgen_version)
 
             progress.log(
                 f"Auto (OMat24) settings from pymatgen {pymatgen_version()}; "
                 f"domain: {meta.domain if meta else 'unknown'}"
             )
+            if monolayer:
+                progress.warn(monolayer_ismear_notice())
 
         from rapmat.storage.status import StructureStatus
 
@@ -574,6 +592,16 @@ class EvalScreen(ScreenBase):
             progress.log(f"Metrics over {used} cached structures")
 
         self._eval_rows = rows
+        self._eval_deviations = {
+            r.structure.id: eval_map[r.structure.id].deviations
+            for r in rows
+            if eval_map[r.structure.id].deviations
+        }
+        if self._eval_deviations:
+            progress.warn(
+                f"{len(self._eval_deviations)} of {used} structures were "
+                "computed with settings that deviate from the OMat24 ones"
+            )
         progress.finish()
 
     def _on_complete(self) -> None:
@@ -596,6 +624,7 @@ class EvalScreen(ScreenBase):
                 phonon_cutoff=phonon_cutoff,
                 stable_only=stable_only,
                 run_name=self._run_name,
+                deviations=self._eval_deviations,
             )
         )
 

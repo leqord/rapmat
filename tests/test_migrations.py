@@ -91,8 +91,9 @@ def test_fresh_db_created_at_head(tmp_path):
     db_file = store.get_url()
     try:
         assert _TABLES <= _table_names(db_file)
-        assert _version(db_file) == "0004"
+        assert _version(db_file) == "0005"
         assert "excluded" in _columns(db_file, "structure")
+        assert "deviations" in _columns(db_file, "evaluation")
         for table in ("run", "structure", "evaluation", "phonon", "phonon_params"):
             assert _fk_list(db_file, table), f"{table} has no FKs"
     finally:
@@ -108,7 +109,7 @@ def test_reopen_is_idempotent_and_preserves_data(tmp_path):
     store2 = SQLiteStore.from_path(tmp_path / "reopen")
     try:
         assert store2.get_run_metadata("r") is not None
-        assert _version(store2.get_url()) == "0004"
+        assert _version(store2.get_url()) == "0005"
     finally:
         store2.close()
 
@@ -143,8 +144,9 @@ def test_legacy_db_stamped_and_upgraded(tmp_path, with_excluded):
 
     store = SQLiteStore.from_path(db_dir)
     try:
-        assert _version(db_file) == "0004"
+        assert _version(db_file) == "0005"
         assert "excluded" in _columns(db_file, "structure")
+        assert "deviations" in _columns(db_file, "evaluation")
         assert _fk_list(db_file, "structure")
 
         with _sqlite(db_file) as conn:

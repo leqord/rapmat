@@ -1,3 +1,4 @@
+import logging
 import threading
 from dataclasses import dataclass, field
 from typing import Callable
@@ -30,11 +31,22 @@ class TaskProgress:
             self.log_lines.append(message)
 
         try:
+            from rapmat.calculators.vasp_recovery import WARN_PREFIX
             from rapmat.utils.console import get_logger
 
-            get_logger("rapmat.task").info("%s", message)
+            level = (
+                logging.WARNING
+                if message.startswith(WARN_PREFIX)
+                else logging.INFO
+            )
+            get_logger("rapmat.task").log(level, "%s", message)
         except Exception:
             pass
+
+    def warn(self, message: str) -> None:
+        from rapmat.calculators.vasp_recovery import WARN_PREFIX
+
+        self.log(f"{WARN_PREFIX}{message}")
 
     def finish(self) -> None:
         with self._lock:

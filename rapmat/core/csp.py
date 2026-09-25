@@ -261,6 +261,17 @@ def run_processing_loop(
     return None
 
 
+def _placeholder_seed(
+    run_seed: int | None, placeholder_id: str, position: int
+) -> int | None:
+    if run_seed is None:
+        return None
+
+    _, _, tail = placeholder_id.rpartition("/")
+    ordinal = int(tail) if tail.isdecimal() else position
+    return (run_seed + ordinal) % (2**32)
+
+
 def run_generation_loop(
     run_name: str,
     store,
@@ -345,9 +356,7 @@ def run_generation_loop(
             spg = ph.gen_spg
             fu = ph.gen_fu
             _log(f"[{counter}/{n_placeholders}] spg={spg} fu={fu}")
-            struct_seed = (
-                (run_seed + counter) % (2**32) if run_seed is not None else None
-            )
+            struct_seed = _placeholder_seed(run_seed, ph.id, counter)
             status, struct_id, atoms = _generate_one_structure(
                 ph.id,
                 spg,
@@ -375,7 +384,7 @@ def run_generation_loop(
                     formula_values,
                     search_dim,
                     thickness_cutoff,
-                    seed=((run_seed + idx) % (2**32) if run_seed is not None else None),
+                    seed=_placeholder_seed(run_seed, ph.id, idx),
                     max_count=max_count,
                 ): ph
                 for idx, ph in enumerate(placeholders, start=1)

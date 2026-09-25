@@ -33,5 +33,6 @@ def generate_one_structure(
         return (StructureStatus.DISCARDED, struct_id, None)
     except pyxtal.msg.Comp_CompatibilityError:
         return (StructureStatus.DISCARDED, struct_id, None)
-    except RuntimeError:
+
+    except Exception:
         return (StructureStatus.ERROR, struct_id, None)

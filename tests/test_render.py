@@ -58,7 +58,7 @@ def test_truecolor_leaves_named_palette_escapes_unchanged():
     screen = urwid.display.raw.Screen()
     screen.register_palette(PALETTE)
 
-    screen.set_terminal_properties(colors=16)
+    screen.set_terminal_properties(colors=16, bright_is_bold=False)
     before = dict(screen._pal_escape)
 
     screen.set_terminal_properties(colors=TRUECOLOR)

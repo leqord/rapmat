@@ -166,6 +166,7 @@ class RapmatApp:
         def _on_close(ok: bool) -> None:
             self._frame.body = saved_body
             if ok:
+                current.on_leave()
                 raise urwid.ExitMainLoop()
 
         self._frame.body = ModalDialog.confirm(

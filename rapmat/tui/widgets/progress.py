@@ -7,6 +7,7 @@ class ProgressPanel(urwid.WidgetWrap):
         self._log_walker = urwid.SimpleListWalker([])
         self._log_box = urwid.ListBox(self._log_walker)
         self._status_text = urwid.Text("", align="center")
+        self._cancelling = False
 
         body = urwid.Pile(
             [
@@ -26,25 +27,29 @@ class ProgressPanel(urwid.WidgetWrap):
         self._bar.done = total
         self._bar.set_completion(current)
 
-        if message:
-            self._status_text.set_text(message)
+        text = message or f"{current} / {total}"
+        if self._cancelling:
+            self._status_text.set_text(("error", f"⏳ Awaiting cancellation... {text}"))
         else:
-            self._status_text.set_text(f"{current} / {total}")
+            self._status_text.set_text(text)
 
     def add_log(self, message: str) -> None:
         self._log_walker.append(urwid.Text(("log_line", message)))
         self._log_box.set_focus(len(self._log_walker) - 1)
 
     def clear(self) -> None:
+        self._cancelling = False
         self._bar.set_completion(0)
         self._status_text.set_text("")
         self._log_walker[:] = []
 
     def set_cancelling(self) -> None:
+        self._cancelling = True
         self._status_text.set_text(("error", "⏳ Awaiting cancellation..."))
         self.add_log("Cancellation requested, waiting for current operation to finish...")
 
     def set_finished(self, success: bool, message: str) -> None:
+        self._cancelling = False
         attr = "success" if success else "error"
         self._status_text.set_text((attr, message))
         if success:

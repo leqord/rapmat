@@ -220,6 +220,20 @@ class TestProgressPanel:
         panel.set_finished(True, "Done!")
         assert panel._bar.current == panel._bar.done
 
+    def test_cancelling_status_survives_progress_updates(self):
+        from rapmat.tui.widgets.progress import ProgressPanel
+
+        panel = ProgressPanel()
+        panel.set_cancelling()
+        panel.set_progress(3, 10, "Generating 4/10")
+        assert "Awaiting cancellation" in panel._status_text.text
+        assert "Generating 4/10" in panel._status_text.text
+        assert panel._bar.current == 3
+
+        panel.set_finished(False, "Error: Cancelled by user.")
+        panel.set_progress(1, 10, "Next run")
+        assert panel._status_text.text == "Next run"
+
 
 class TestModalDialog:
     def test_confirm_builds(self):

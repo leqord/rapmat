@@ -1,4 +1,5 @@
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
@@ -324,3 +325,134 @@ def test_unexpected_generation_error_is_an_error_status():
     assert status == StructureStatus.ERROR
     assert struct_id == "run/1"
     assert atoms is None
+
+
+@pytest.fixture
+def gen_env(tmp_path):
+    store = SQLiteStore.from_path(tmp_path / "gen_db")
+    run_name = "cancel-run"
+    config = {"formula": {"Cu": 1}, "calculator": "MATTERSIM", "domain": "bulk"}
+    store.create_study(
+        study_id=f"study-{run_name}", system="Cu", domain="bulk",
+        calculator="MATTERSIM", config=config,
+    )
+    store.create_run(name=run_name, study_id=f"study-{run_name}")
+    store.add_generation_placeholders(
+        run_name, [(f"{run_name}/{i}", 225, 1) for i in range(1, 13)]
+    )
+    return store, run_name, config
+
+
+def _generate_cu(struct_id, *args, **kwargs):
+    return (StructureStatus.GENERATED, struct_id, bulk("Cu", "fcc", a=3.615))
+
+
+@patch("rapmat.calculators.factory.load_calculator")
+@patch("rapmat.core.csp._generate_one_structure")
+def test_cancel_stops_generation_and_resume_finishes(mock_gen, mock_load_calc, gen_env):
+    from rapmat.tui.tasks import TaskProgress
+
+    store, run_name, config = gen_env
+    mock_load_calc.return_value = EMT()
+    progress = TaskProgress()
+
+    def _generate(struct_id, *args, **kwargs):
+        if mock_gen.call_count == 2:
+            progress.cancelled = True
+        return _generate_cu(struct_id)
+
+    mock_gen.side_effect = _generate
+
+    with pytest.raises(KeyboardInterrupt):
+        execute_run(
+            run_name, store, config, worker_id="w-test",
+            progress_callback=progress.as_callback(),
+        )
+
+    assert mock_gen.call_count == 2
+    assert len(store.get_pending_generation(run_name)) == 10
+    assert store.get_run_metadata(run_name).run_status == str(RunStatus.INTERRUPTED)
+    mock_load_calc.assert_not_called()
+
+    mock_gen.side_effect = _generate_cu
+    execute_run(
+        run_name, store, config, worker_id="w-test",
+        progress_callback=TaskProgress().as_callback(),
+    )
+
+    assert mock_gen.call_count == 12
+    assert store.get_pending_generation(run_name) == []
+    assert store.get_run_metadata(run_name).run_status == str(RunStatus.COMPLETED)
+
+
+@patch("concurrent.futures.ProcessPoolExecutor", ThreadPoolExecutor)
+@patch("rapmat.calculators.factory.load_calculator")
+@patch("rapmat.core.csp._generate_one_structure")
+def test_cancel_drops_the_queued_parallel_jobs(mock_gen, mock_load_calc, gen_env):
+    from rapmat.tui.tasks import TaskProgress
+
+    store, run_name, config = gen_env
+    progress = TaskProgress()
+
+    def _generate(struct_id, *args, **kwargs):
+        ordinal = int(struct_id.rpartition("/")[2])
+        if ordinal == 2:
+            progress.cancelled = True
+        elif ordinal > 2:
+            time.sleep(0.5)
+        return _generate_cu(struct_id)
+
+    mock_gen.side_effect = _generate
+
+    with pytest.raises(KeyboardInterrupt):
+        execute_run(
+            run_name, store, config, worker_id="w-test", workers=3,
+            progress_callback=progress.as_callback(),
+        )
+
+    assert mock_gen.call_count <= 5
+    assert len(store.get_pending_generation(run_name)) == 12 - mock_gen.call_count
+    assert store.get_run_metadata(run_name).run_status == str(RunStatus.INTERRUPTED)
+    mock_load_calc.assert_not_called()
+
+
+@patch("concurrent.futures.ProcessPoolExecutor", ThreadPoolExecutor)
+@patch("rapmat.core.csp._generate_one_structure")
+def test_a_failure_in_the_pool_loop_drops_the_queue(mock_gen, gen_env):
+    store, run_name, config = gen_env
+
+    def _generate(struct_id, *args, **kwargs):
+        if int(struct_id.rpartition("/")[2]) > 1:
+            time.sleep(0.5)
+        return _generate_cu(struct_id)
+
+    mock_gen.side_effect = _generate
+
+    with patch.object(
+        store, "update_generated_structure", side_effect=RuntimeError("disk full")
+    ):
+        with pytest.raises(RuntimeError, match="disk full"):
+            run_generation_loop(run_name, store, config, workers=3)
+
+    assert mock_gen.call_count <= 4
+
+
+@pytest.mark.parametrize(
+    "workers, expected", [(1, list(range(0, 12))), (3, list(range(1, 13)))]
+)
+@patch("concurrent.futures.ProcessPoolExecutor", ThreadPoolExecutor)
+@patch("rapmat.core.csp._generate_one_structure")
+def test_generation_reports_progress(mock_gen, workers, expected, gen_env):
+    store, run_name, config = gen_env
+    mock_gen.side_effect = _generate_cu
+    calls = []
+
+    def _progress(current, total, message="", is_log=True):
+        calls.append((current, total, is_log))
+
+    run_generation_loop(
+        run_name, store, config, workers=workers, progress_callback=_progress
+    )
+
+    assert [c[0] for c in calls] == expected
+    assert all(total == 12 and is_log is False for _, total, is_log in calls)

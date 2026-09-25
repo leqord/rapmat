@@ -203,6 +203,32 @@ class TestScreenBaseEsc:
         assert task.cancelled is True
         assert cancelling == [True]
 
+    @pytest.mark.parametrize("confirmed", [True, False])
+    def test_quit_anyway_cancels_the_running_task(self, confirmed):
+        from unittest.mock import patch
+
+        app, _state = _make_app()
+        task = _FakeRunningTask()
+        app._router.current._task = task
+
+        captured = {}
+
+        def _confirm(title, message, parent, on_close):
+            captured["on_close"] = on_close
+            return parent
+
+        with patch(
+            "rapmat.tui.widgets.dialog.ModalDialog.confirm", side_effect=_confirm
+        ):
+            app._request_quit()
+
+        if confirmed:
+            with pytest.raises(urwid.ExitMainLoop):
+                captured["on_close"](True)
+        else:
+            captured["on_close"](False)
+        assert task.cancelled is confirmed
+
     def test_esc_without_task_falls_through(self):
         app, _state = _make_app()
         screen = app._router.current

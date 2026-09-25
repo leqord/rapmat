@@ -325,8 +325,18 @@ def run_generation_loop(
         if log_callback:
             log_callback(msg)
 
+    flag = cancel_flag if cancel_flag is not None else [False]
+
     def _is_cancelled() -> bool:
-        return cancel_flag is not None and cancel_flag[0]
+        return flag[0]
+
+    def _tick(done: int, msg: str) -> None:
+        if progress_callback is None or flag[0]:
+            return
+        try:
+            progress_callback(done, n_placeholders, msg, is_log=False)
+        except KeyboardInterrupt:
+            flag[0] = True
 
     def _handle_result(status, struct_id, atoms, spg, fu):
         nonlocal generated, discarded, errors
@@ -346,6 +356,9 @@ def run_generation_loop(
 
     if workers <= 1:
         for counter, ph in enumerate(placeholders, start=1):
+            spg = ph.gen_spg
+            fu = ph.gen_fu
+            _tick(counter - 1, f"Generating {counter}/{n_placeholders}: spg={spg} fu={fu}")
             if _is_cancelled():
                 _log("Generation cancelled by user")
                 break
@@ -353,8 +366,6 @@ def run_generation_loop(
             if worker_id and counter % 20 == 0:
                 store.update_heartbeat(run_name, worker_id)
 
-            spg = ph.gen_spg
-            fu = ph.gen_fu
             _log(f"[{counter}/{n_placeholders}] spg={spg} fu={fu}")
             struct_seed = _placeholder_seed(run_seed, ph.id, counter)
             status, struct_id, atoms = _generate_one_structure(
@@ -390,25 +401,39 @@ def run_generation_loop(
                 for idx, ph in enumerate(placeholders, start=1)
             }
 
-            for counter, future in enumerate(as_completed(futures), start=1):
-                if _is_cancelled():
-                    _log("Generation cancelled - cancelling pending futures...")
-                    for f in futures:
-                        f.cancel()
-                    break
+            handled = set()
+            try:
+                for counter, future in enumerate(as_completed(futures), start=1):
+                    if worker_id and counter % 20 == 0:
+                        store.update_heartbeat(run_name, worker_id)
 
-                if worker_id and counter % 20 == 0:
-                    store.update_heartbeat(run_name, worker_id)
+                    status, struct_id, atoms = future.result()
+                    ph = futures[future]
+                    _handle_result(
+                        status, struct_id, atoms, ph.gen_spg, ph.gen_fu
+                    )
+                    handled.add(future)
 
-                status, struct_id, atoms = future.result()
-                ph = futures[future]
-                _handle_result(
-                    status, struct_id, atoms, ph.gen_spg, ph.gen_fu
-                )
-                
-                if counter % 100 == 0:
-                    _log(
-                        f"Generated {counter}/{n_placeholders} (ok={generated}, disc={discarded}, err={errors})"
+                    if counter % 100 == 0:
+                        _log(
+                            f"Generated {counter}/{n_placeholders} (ok={generated}, disc={discarded}, err={errors})"
+                        )
+
+                    _tick(counter, f"Generated {counter}/{n_placeholders}")
+                    if _is_cancelled():
+                        _log("Generation cancelled - cancelling pending futures...")
+                        break
+            finally:
+                for f in futures:
+                    f.cancel()
+
+            if _is_cancelled():
+                for f, ph in futures.items():
+                    if f in handled or f.cancelled():
+                        continue
+                    status, struct_id, atoms = f.result()
+                    _handle_result(
+                        status, struct_id, atoms, ph.gen_spg, ph.gen_fu
                     )
 
     _log(f"Generation finished: {generated} ok, {discarded} discarded, {errors} errors")
@@ -472,7 +497,7 @@ def execute_run(
                 if flag[0]:
                     raise KeyboardInterrupt("Cancelled by user")
                 _cb(
-                    0, 0,
+                    len(pending), len(pending),
                     "Generation complete. Initializing calculator...",
                 )
 

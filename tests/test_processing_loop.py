@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 
 import pytest
@@ -5,6 +6,7 @@ from ase.build import bulk
 from ase.calculators.emt import EMT
 from conftest import add_generated_candidate
 
+from rapmat import app_config
 from rapmat.core.csp import execute_run, run_processing_loop
 from rapmat.storage import SQLiteStore
 from rapmat.storage.status import RunStatus, StructureStatus
@@ -188,3 +190,46 @@ def test_execute_run_failure_releases_failed(mock_load_calc, loop_env):
     assert meta.run_status == str(RunStatus.FAILED)
     assert meta.worker_id is None
 
+
+@pytest.fixture
+def vasp_loop_env(loop_env, tmp_path, monkeypatch):
+    monkeypatch.setattr(app_config, "APP_CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(app_config, "_SETTINGS_FILE", tmp_path / "settings.toml")
+    monkeypatch.setattr("ase.calculators.vasp.vasp.cfg", os.environ)
+    for name in ("ASE_VASP_COMMAND", "VASP_COMMAND", "VASP_SCRIPT"):
+        monkeypatch.delenv(name, raising=False)
+
+    loop_env["config"] = {**loop_env["config"], "calculator": "VASP"}
+    return loop_env
+
+
+@patch("rapmat.calculators.factory.load_calculator")
+def test_vasp_run_uses_the_saved_command(mock_load_calc, vasp_loop_env):
+    mock_load_calc.return_value = EMT()
+    app_config.persist_vasp_command("mpirun -np 4 vasp_std")
+
+    execute_run(
+        vasp_loop_env["run_name"],
+        vasp_loop_env["store"],
+        vasp_loop_env["config"],
+        worker_id="w-test",
+    )
+
+    config = mock_load_calc.call_args.kwargs["config"]
+    assert config["command"] == "mpirun -np 4 vasp_std"
+    meta = vasp_loop_env["store"].get_run_metadata(vasp_loop_env["run_name"])
+    assert meta.run_status == str(RunStatus.COMPLETED)
+
+
+def test_vasp_run_without_command_fails_before_relaxing(vasp_loop_env):
+    store = vasp_loop_env["store"]
+    run_name = vasp_loop_env["run_name"]
+
+    with pytest.raises(RuntimeError, match="No VASP command"):
+        execute_run(run_name, store, vasp_loop_env["config"], worker_id="w-test")
+
+    meta = store.get_run_metadata(run_name)
+    assert meta.run_status == str(RunStatus.FAILED)
+    # NOTE: nothing is marked ERROR, so the run can be resumed
+    assert len(store.get_unrelaxed_candidates(run_name)) == 3
+    assert store.count_by_status(run_name).get("error", 0) == 0

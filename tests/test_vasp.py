@@ -1,11 +1,14 @@
+import os
 from pathlib import Path
 
 import pytest
 from ase.calculators.vasp import Vasp
 
+from rapmat import app_config
 from rapmat.calculators import Calculators, cleanup_calculator_files
 from rapmat.calculators.factory import load_calculator
-from rapmat.calculators.vasp import build_calculator_vasp
+from rapmat.calculators.vasp import (build_calculator_vasp, preflight_command,
+                                     with_default_command)
 
 
 class TestBuildCalculatorVasp:
@@ -169,3 +172,59 @@ class TestFactoryVasp:
         calc = load_calculator(Calculators.VASP, config=config)
         assert isinstance(calc, Vasp)
         assert calc.parameters["encut"] == 600
+
+
+@pytest.fixture
+def no_vasp_command(tmp_path, monkeypatch):
+    monkeypatch.setattr(app_config, "APP_CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(app_config, "_SETTINGS_FILE", tmp_path / "settings.toml")
+
+    monkeypatch.setattr("ase.calculators.vasp.vasp.cfg", os.environ)
+    for name in ("ASE_VASP_COMMAND", "VASP_COMMAND", "VASP_SCRIPT"):
+        monkeypatch.delenv(name, raising=False)
+
+
+class TestWithDefaultCommand:
+    def test_uses_the_saved_command(self, no_vasp_command):
+        app_config.persist_vasp_command("mpirun -np 4 vasp_std")
+        assert with_default_command({"encut": 500}) == {
+            "encut": 500,
+            "command": "mpirun -np 4 vasp_std",
+        }
+
+    def test_uses_the_environment(self, no_vasp_command, monkeypatch):
+        monkeypatch.setenv("ASE_VASP_COMMAND", "srun vasp_std")
+        assert with_default_command({})["command"] == "srun vasp_std"
+
+    def test_explicit_command_wins(self, no_vasp_command):
+        app_config.persist_vasp_command("saved")
+        assert with_default_command({"command": "explicit"}) == {
+            "command": "explicit"
+        }
+
+    def test_nothing_to_add(self, no_vasp_command):
+        assert with_default_command({"encut": 500}) == {"encut": 500}
+
+    def test_config_dict_not_mutated(self, no_vasp_command):
+        app_config.persist_vasp_command("saved")
+        config = {"encut": 500}
+        with_default_command(config)
+        assert config == {"encut": 500}
+
+
+class TestPreflightCommand:
+    def test_missing_command_raises(self, no_vasp_command):
+        with pytest.raises(RuntimeError, match="No VASP command"):
+            preflight_command(build_calculator_vasp({}))
+
+    def test_explicit_command_passes(self, no_vasp_command):
+        preflight_command(build_calculator_vasp({"command": "vasp_std"}))
+
+    def test_vasp_script_passes(self, no_vasp_command, monkeypatch):
+        monkeypatch.setenv("VASP_SCRIPT", "/opt/run_vasp.py")
+        preflight_command(build_calculator_vasp({}))
+
+    def test_non_vasp_calculator_is_ignored(self, no_vasp_command):
+        from ase.calculators.emt import EMT
+
+        preflight_command(EMT())

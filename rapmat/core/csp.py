@@ -39,6 +39,10 @@ def run_processing_loop(
 
     calculator_name = cfg.calculator.upper()
     calculator_config = cfg.calculator_config
+    if calculator_name == Calculators.VASP.value:
+        from rapmat.calculators.vasp import with_default_command
+
+        calculator_config = with_default_command(calculator_config)
     domain_val = cfg.domain
     symprec = cfg.symprec
     pressure_gpa = cfg.pressure_gpa
@@ -91,7 +95,9 @@ def run_processing_loop(
 
     # NOTE: Build one upfront so a broken calculator fails the run prematurely
     if candidates:
-        calculator_for(candidates[0].atoms)
+        from rapmat.calculators.vasp import preflight_command
+
+        preflight_command(calculator_for(candidates[0].atoms))
 
     def _run_loop():
         nonlocal counter, discarded_sanity, n_relaxed

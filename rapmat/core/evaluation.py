@@ -296,8 +296,23 @@ def compute_stability_metrics(
     }
 
 
+def ranking_per_atom(r) -> float:
+    h = r.enthalpy_per_atom
+    return h if h is not None else r.energy_per_atom
+
+
+def ref_ranking_per_atom(r) -> float | None:
+    ref = r.ref_energy_per_atom
+    h = r.enthalpy_per_atom
+    if ref is None or h is None:
+        return ref
+    
+    # NOTE: both share the same PV/N
+    return ref + (h - r.energy_per_atom)
+
+
 def select_eval_records(records: Sequence, top_n: int) -> list:
-    ordered = sorted(records, key=lambda r: r.energy_per_atom)
+    ordered = sorted(records, key=ranking_per_atom)
     if top_n and top_n > 0:
         ordered = ordered[:top_n]
     return ordered
@@ -332,8 +347,8 @@ def comparison_from_result_rows(rows: Sequence) -> list[ComparisonRow]:
             ComparisonRow(
                 id=r.structure_id,
                 formula=r.formula,
-                mlip_epa=r.energy_per_atom,
-                ref_epa=r.ref_energy_per_atom,
+                mlip_epa=ranking_per_atom(r),
+                ref_epa=ref_ranking_per_atom(r),
                 mlip_phonon_freq=r.min_phonon_freq,
                 ref_phonon_freq=r.ref_phonon_freq,
             )

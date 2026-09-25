@@ -4,7 +4,8 @@ from rapmat.core.entities import Evaluation, ResultRow, Structure
 from rapmat.core.evaluation import (ComparisonRow, comparison_from_result_rows,
                                     compute_ranking_metrics,
                                     compute_stability_metrics,
-                                    eval_rows_from_cache, select_eval_records)
+                                    eval_rows_from_cache, ranking_per_atom,
+                                    ref_ranking_per_atom, select_eval_records)
 
 
 def _rows(dicts):
@@ -285,3 +286,96 @@ class TestComparisonFromResultRows:
     def test_drops_rows_without_ref(self):
         row = ResultRow(structure=_struct("a", -5.0), ref_energy_per_atom=None)
         assert comparison_from_result_rows([row]) == []
+
+
+def _pressurized(sid, epa, a):
+    from ase.build import bulk
+
+    return Structure(
+        id=sid,
+        status="relaxed",
+        energy_per_atom=epa,
+        converged=True,
+        final_atoms=bulk("Cu", "fcc", a=a),
+        pressure_gpa=10.0,
+    )
+
+
+class TestUnderPressure:
+    @pytest.fixture
+    def recs(self):
+        loose = _pressurized("loose", -5.00, a=3.6)
+        dense = _pressurized("dense", -4.99, a=3.3)
+        assert loose.energy_per_atom < dense.energy_per_atom
+        assert dense.enthalpy_per_atom < loose.enthalpy_per_atom
+        return [loose, dense]
+
+    @pytest.fixture
+    def rows(self, recs):
+        eval_map = {"loose": _eval("loose", -5.10), "dense": _eval("dense", -5.09)}
+        return eval_rows_from_cache(recs, eval_map, run_name="r1")
+
+    def test_top_n_is_picked_by_enthalpy(self, recs):
+        assert [r.id for r in select_eval_records(recs, top_n=1)] == ["dense"]
+
+    def test_comparison_uses_enthalpy_on_both_sides(self, rows):
+        by_id = {c.id: c for c in comparison_from_result_rows(rows)}
+        for r in rows:
+            pv = r.enthalpy_per_atom - r.energy_per_atom
+            c = by_id[r.structure_id]
+            assert c.mlip_epa == pytest.approx(r.enthalpy_per_atom)
+            assert c.ref_epa == pytest.approx(r.ref_energy_per_atom + pv)
+
+    def test_mae_is_unchanged_by_the_pv_term(self, rows):
+        m = compute_ranking_metrics(comparison_from_result_rows(rows), stable_only=False)
+        assert m["mae_epa"] == pytest.approx(0.1)
+        assert m["kendall_tau"] == pytest.approx(1.0)
+
+    def test_eval_results_rank_by_enthalpy(self, rows):
+        from rapmat.tui.screens.eval import EvalResultsScreen
+
+        screen = EvalResultsScreen(
+            None, None, eval_rows=rows, phonon_cutoff=-0.15,
+            stable_only=False, run_name="r1",
+        )
+        screen._fetch_data()
+
+        assert screen._rank_map == {"dense": (1, 1), "loose": (2, 2)}
+        labels = [name for name, _ in screen._columns_def()]
+        assert labels[2:4] == ["MLIP H/A", "Ref H/A"]
+
+        dense = next(r for r in rows if r.structure_id == "dense")
+        cells = screen._format_row(dense)
+        assert cells[2] == f"{dense.enthalpy_per_atom:.4f}"
+        details = " ".join(text for _, text in screen._get_extra_details(dense))
+        assert "Ref Enthalpy/A" in details
+        assert "Ref Energy/A: -5.090000" in details
+
+    def test_eval_results_at_zero_pressure_keep_energy_labels(self):
+        from rapmat.tui.screens.eval import EvalResultsScreen
+
+        rows = eval_rows_from_cache(
+            [_struct("a", -5.0)], {"a": _eval("a", -5.1)}, run_name="r1"
+        )
+        screen = EvalResultsScreen(
+            None, None, eval_rows=rows, phonon_cutoff=-0.15,
+            stable_only=False, run_name="r1",
+        )
+        screen._fetch_data()
+
+        labels = [name for name, _ in screen._columns_def()]
+        assert labels[2:4] == ["MLIP eV/A", "Ref eV/A"]
+        details = " ".join(text for _, text in screen._get_extra_details(rows[0]))
+        assert "Enthalpy" not in details
+
+    def test_zero_pressure_values_are_exactly_the_stored_ones(self):
+        from ase.build import bulk
+
+        rec = Structure(
+            id="a", status="relaxed", energy_per_atom=-5.20000011,
+            converged=True, final_atoms=bulk("Cu", "fcc", a=3.6),
+        )
+        row = ResultRow(structure=rec, ref_energy_per_atom=-5.12345678)
+
+        assert ranking_per_atom(row) == -5.20000011
+        assert ref_ranking_per_atom(row) == -5.12345678

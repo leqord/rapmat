@@ -4,6 +4,7 @@ import urwid
 
 from rapmat.calculators import Calculators
 from rapmat.core.entities import ResultRow, Structure
+from rapmat.core.evaluation import ranking_per_atom, ref_ranking_per_atom
 from rapmat.tui.keymap import KeyBinding
 from rapmat.tui.router import ScreenRouter
 from rapmat.tui.screens.base import ScreenBase
@@ -27,9 +28,9 @@ from rapmat.tui.widgets.progress import ProgressPanel
 _RESULT_COLS_BASE = [
     ("ID", 8),
     ("Formula", 10),
-    ("MLIP eV/at", 12),
-    ("Ref eV/at", 12),
-    ("Δ eV/at", 10),
+    ("MLIP eV/A", 12),
+    ("Ref eV/A", 12),
+    ("Δ eV/A", 10),
     ("MLIP#", 6),
     ("Ref#", 6),
 ]
@@ -75,6 +76,9 @@ class EvalResultsScreen(BaseResultsScreen):
 
     def _fetch_data(self, progress_callback=None) -> None:
         self._results = list(self._eval_rows)
+        self._pressure_gpa = max(
+            (r.structure.pressure_gpa for r in self._results), default=0.0
+        )
         self._show_duplicate_col = any(
             r.duplicate is not None for r in self._results
         )
@@ -109,16 +113,12 @@ class EvalResultsScreen(BaseResultsScreen):
     def _compute_rank_map(display: list) -> dict:
         mlip_rank = {
             r.structure_id: i
-            for i, r in enumerate(
-                sorted(display, key=lambda x: x.energy_per_atom), 1
-            )
+            for i, r in enumerate(sorted(display, key=ranking_per_atom), 1)
         }
         ref_rows = [r for r in display if r.ref_energy_per_atom is not None]
         ref_rank = {
             r.structure_id: i
-            for i, r in enumerate(
-                sorted(ref_rows, key=lambda x: x.ref_energy_per_atom), 1
-            )
+            for i, r in enumerate(sorted(ref_rows, key=ref_ranking_per_atom), 1)
         }
         return {sid: (mlip_rank[sid], ref_rank.get(sid)) for sid in mlip_rank}
 
@@ -155,7 +155,7 @@ class EvalResultsScreen(BaseResultsScreen):
                 metric_parts.append(("details", "  |  "))
             metric_parts.extend([
                 ("form_label", "MAE: "),
-                ("details", f"{r['mae_epa']:.4f} eV/at"),
+                ("details", f"{r['mae_epa']:.4f} eV/A"),
             ])
 
         s = self._stability
@@ -187,6 +187,8 @@ class EvalResultsScreen(BaseResultsScreen):
 
     def _columns_def(self) -> list:
         cols = list(_RESULT_COLS_BASE)
+        if self._pressure_gpa > 0:
+            cols[2:4] = [("MLIP H/A", 12), ("Ref H/A", 12)]
         if self._show_thickness:
             cols.append(("Thick", 9))
         if self._show_dynamical_stability:
@@ -206,8 +208,8 @@ class EvalResultsScreen(BaseResultsScreen):
     def _format_row(self, r) -> list:
         short_id = r.short_id
 
-        mlip = r.energy_per_atom
-        ref = r.ref_energy_per_atom
+        mlip = ranking_per_atom(r)
+        ref = ref_ranking_per_atom(r)
         mr, rr = self._rank_map.get(r.structure_id, (None, None))
 
         row = [
@@ -242,13 +244,16 @@ class EvalResultsScreen(BaseResultsScreen):
         return "body"
 
     def _get_extra_details(self, r) -> list:
-        ref = r.ref_energy_per_atom
+        ref = ref_ranking_per_atom(r)
         if ref is None:
             return []
-        mlip = r.energy_per_atom
-        extras = [
-            ("details", f"Ref Energy/A: {ref:.6f} eV"),
-            ("details", f"Δ (Ref-MLIP): {ref - mlip:+.6f} eV/at"),
+        mlip = ranking_per_atom(r)
+        extras = []
+        if self._pressure_gpa > 0:
+            extras.append(("details", f"Ref Enthalpy/A: {ref:.6f} eV"))
+        extras += [
+            ("details", f"Ref Energy/A: {r.ref_energy_per_atom:.6f} eV"),
+            ("details", f"Δ (Ref-MLIP): {ref - mlip:+.6f} eV/A"),
         ]
         mr, rr = self._rank_map.get(r.structure_id, (None, None))
         if mr is not None and rr is not None:

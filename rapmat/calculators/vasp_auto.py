@@ -33,7 +33,8 @@ _LDAU_KEYS = ("LDAUL", "LDAUU", "LDAUJ")
 
 def monolayer_ismear_notice() -> str:
     return (
-        f"monolayer run: ISMEAR={MONOLAYER_ISMEAR} (Gaussian) applied."
+        f"monolayer run: ISMEAR={MONOLAYER_ISMEAR} (Gaussian) applied, "
+        f"while OMat24 suggests ISMEAR={MPRELAXSET_ISMEAR} (tetrahedron)"
     )
 
 

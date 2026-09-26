@@ -61,7 +61,7 @@ def calculator_fields(
             "calculator_settings",
             "Settings",
             _SETTINGS_OPTIONS,
-            default=_SETTINGS_OPTIONS.index(SETTINGS_AUTO),
+            default=_SETTINGS_OPTIONS.index(SETTINGS_TOML),
         ),
         text_field("calculator_config", "Config TOML Path", default=""),
         text_field("vasp_command", "VASP command", default=resolve_vasp_command()),

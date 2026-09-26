@@ -8,7 +8,7 @@ if sys.platform == "win32":
 from rapmat.storage.sqlite_store import SQLiteStore
 from rapmat.tui.app import RapmatApp
 from rapmat.tui.state import AppState
-from rapmat.tui.widgets.calc_fields import SETTINGS_AUTO
+from rapmat.tui.widgets.calc_fields import SETTINGS_AUTO, SETTINGS_TOML
 
 _SIZE = (110, 30)
 
@@ -53,16 +53,17 @@ def test_fields_are_visible(eval_screen):
     assert "Config TOML Path:" in text
 
 
-def test_eval_defaults_to_vasp_and_auto(eval_screen):
+def test_eval_defaults_to_vasp_and_toml(eval_screen):
     screen, widget = eval_screen
     text = _render(widget)
     assert "VASP" in text
-    assert SETTINGS_AUTO in text
+    assert SETTINGS_TOML in text
     assert screen._form.get_values()["calculator"] == "VASP"
 
 
 def test_auto_locks_the_toml_path(eval_screen):
     screen, _widget = eval_screen
+    _select(screen._form, "calculator_settings", SETTINGS_AUTO)
     assert screen._form.is_field_disabled("calculator_config")
     assert not screen._form.is_field_disabled("vasp_command")
 

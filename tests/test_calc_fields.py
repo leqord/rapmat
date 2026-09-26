@@ -38,8 +38,8 @@ class TestFieldSet:
         keys = {spec.key for spec in calculator_fields()}
         assert set(CALCULATOR_FIELD_KEYS) <= keys
 
-    def test_defaults_to_auto_mode(self):
-        assert _form().get_values()["calculator_settings"] == SETTINGS_AUTO
+    def test_defaults_to_toml_mode(self):
+        assert _form().get_values()["calculator_settings"] == SETTINGS_TOML
 
     def test_calculator_defaults_to_an_mlip(self):
         assert _form().get_values()["calculator"] == "MATTERSIM"
@@ -72,7 +72,7 @@ class TestEnableLogic:
     def test_vasp_auto_locks_the_toml_path(self):
         form = _form()
         _select(form, "calculator", "VASP")
-        assert form.get_values()["calculator_settings"] == SETTINGS_AUTO
+        _select(form, "calculator_settings", SETTINGS_AUTO)
         assert form.is_field_disabled("calculator_config")
         assert not form.is_field_disabled("vasp_command")
 

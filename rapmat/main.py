@@ -1,7 +1,11 @@
 def app_main() -> None:
+    import logging
+
     from rapmat.utils.console import configure_logging
 
     configure_logging()
+    
+    logging.captureWarnings(True)
 
     from rapmat.db_config import resolve_store
     from rapmat.tui.app import RapmatApp

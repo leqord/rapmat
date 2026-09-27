@@ -63,6 +63,29 @@ def test_relax_force_break_aborts():
     assert converged is False
 
 
+def test_relax_does_not_leak_logm_warnings(monkeypatch):
+    import warnings
+
+    import scipy.linalg
+
+    orig_logm = scipy.linalg.logm
+
+    def _noisy_logm(*args, **kwargs):
+        warnings.warn("logm result may be inaccurate", RuntimeWarning)
+        return orig_logm(*args, **kwargs)
+
+    monkeypatch.setattr(scipy.linalg, "logm", _noisy_logm)
+
+    atoms = bulk("Cu", "fcc", a=3.7)
+    atoms.calc = EMT()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        structure_relax(atoms, force_conv_crit=0.05, steps_max=200)
+
+    assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]
+
+
 def test_relax_mask_preserves_z_cell():
     slab = fcc111("Al", size=(2, 2, 2), vacuum=10.0)
     slab.calc = EMT()

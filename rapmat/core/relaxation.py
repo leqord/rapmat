@@ -1,4 +1,5 @@
 import warnings
+from contextlib import nullcontext
 from typing import Optional, Tuple, Type
 
 import numpy as np
@@ -35,11 +36,10 @@ def structure_relax(
 
     last_fmax = float("inf")
     force_broken = False
-    ctx = warnings.catch_warnings() if suppress_warnings else None
+    ctx = warnings.catch_warnings() if suppress_warnings else nullcontext()
     step = 0
-    try:
-        if ctx is not None:
-            ctx.__enter__()
+    with ctx:
+        if suppress_warnings:
             warnings.simplefilter("ignore")
         with optimizer_cls(atoms_cf, logfile=opt_logfile) as optimizer:
             iterator = optimizer.irun(fmax=force_conv_crit, steps=steps_max)
@@ -62,11 +62,8 @@ def structure_relax(
                     force_broken = True
                     break
 
-    finally:
-        if ctx is not None:
-            ctx.__exit__(None, None, None)
 
-    converged = not force_broken and _max_force(atoms_cf) <= force_conv_crit
+        converged = not force_broken and _max_force(atoms_cf) <= force_conv_crit
 
     if cleanup_gpu:
         free_cuda_memory()

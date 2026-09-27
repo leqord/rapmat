@@ -229,7 +229,6 @@ class FormDialog(ModalDialog):
         parent: urwid.Widget,
         buttons: Sequence[tuple[str, Callable[[], None]]],
         *,
-        section: str | None = None,
         on_cancel: Callable[[], None] | None = None,
         width: int = 50,
         min_width: int = 40,
@@ -256,19 +255,13 @@ class FormDialog(ModalDialog):
             dividechars=2,
         )
 
-        items: list = []
-        if section is not None:
-            items.extend([
-                ("pack", urwid.Text(("section", f" {section}"), align="left")),
-                ("pack", urwid.Divider("-")),
-            ])
-        items.extend([
+        items: list = [
             ("pack", form),
             ("pack", urwid.Divider()),
             ("pack", self._error),
             ("pack", urwid.Divider()),
             ("pack", btn_row),
-        ])
+        ]
 
         super().__init__(
             title, urwid.Pile(items), parent, width=width, min_width=min_width

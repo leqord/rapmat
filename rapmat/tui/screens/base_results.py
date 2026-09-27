@@ -714,7 +714,6 @@ class BaseResultsScreen(ScreenBase):
                 form,
                 parent,
                 [("Apply", _on_apply), ("Clear", _on_clear), ("Cancel", close)],
-                section="Thickness Filter",
                 on_cancel=close,
             )
             return dlg
@@ -768,7 +767,6 @@ class BaseResultsScreen(ScreenBase):
                 form,
                 parent,
                 [("Apply", _on_apply), ("Cancel", close)],
-                section="Options",
                 on_cancel=close,
             )
             return dlg

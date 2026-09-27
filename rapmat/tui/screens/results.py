@@ -77,6 +77,7 @@ class ResultsScreen(BaseResultsScreen):
         self._show_flags_col = any(
             r.duplicate is True or r.excluded for r in self._results
         )
+        self._label_spacegroups(progress_callback)
 
     def _columns_def(self) -> list[tuple[str, int]]:
         epa_label = "H/A" if self._pressure_gpa > 0 else "E/A"

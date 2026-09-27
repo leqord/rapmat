@@ -65,6 +65,34 @@ def test_spacegroup_empty_without_atoms():
     assert Structure(id="s").final_spg == ""
 
 
+def test_spacegroup_label_is_cached_until_inputs_change(monkeypatch):
+    import rapmat.storage.models as models
+
+    calls = []
+    real = models.format_spg
+
+    def counted(atoms, symprec=1e-3):
+        calls.append(atoms)
+        return real(atoms, symprec=symprec)
+
+    monkeypatch.setattr(models, "format_spg", counted)
+
+    s = Structure(id="s", initial_atoms=_si(), final_atoms=_si(), symprec=1e-3)
+    label = s.final_spg
+    assert s.final_spg == label
+    assert s.initial_spg == label
+    assert s.initial_spg == label
+    assert len(calls) == 2
+
+    s.symprec = 1e-5
+    assert s.final_spg == label
+    assert len(calls) == 3
+
+    s.final_atoms = _si()
+    assert s.final_spg == label
+    assert len(calls) == 4
+
+
 def test_forces_from_atoms_info():
     atoms = _si()
     assert Structure(id="s", final_atoms=atoms).forces is None

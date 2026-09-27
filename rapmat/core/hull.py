@@ -11,6 +11,7 @@ from rapmat.core.entities import ResultRow, Structure
 from rapmat.storage.base import StructureStore
 from rapmat.storage.status import StructureStatus
 from rapmat.utils.common import parse_system
+from rapmat.utils.progress import ProgressCallback
 
 
 def get_composition_fraction(formula: dict[str, int], element: str) -> float:
@@ -29,17 +30,32 @@ def collect_study_structures(
     study_id: str,
     *,
     symprec: float = 1e-3,
+    progress_callback: ProgressCallback | None = None,
 ) -> tuple[list[Structure], str, bool]:
     study = store.get_study(study_id)
     if study is None:
         raise ValueError(f"Study '{study_id}' not found.")
 
     use_enthalpy = study.search_config.pressure_gpa > 0
+    runs = store.get_study_runs(study_id)
     structures: list[Structure] = []
-    for run in store.get_study_runs(study_id):
+
+    total = 0
+    if progress_callback is not None:
+        relaxed = str(StructureStatus.RELAXED)
+        total = sum(store.count_by_status(run.name).get(relaxed, 0) for run in runs)
+
+    def _run_progress(current: int, _total: int, _message: str = "", *_) -> None:
+        n = len(structures) + current
+        progress_callback(n, total, f"Loading structures {n}/{total}...")
+
+    for run in runs:
         structures.extend(
             store.get_structures(
-                run.name, status=StructureStatus.RELAXED, symprec=symprec
+                run.name,
+                status=StructureStatus.RELAXED,
+                symprec=symprec,
+                progress_callback=_run_progress if progress_callback else None,
             )
         )
     return structures, study.system, use_enthalpy

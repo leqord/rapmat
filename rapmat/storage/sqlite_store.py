@@ -36,6 +36,7 @@ from rapmat.utils.console import get_logger
 
 
 _EXIT_VACUUM_MAX_PAGES = 20_000
+_LOAD_BATCH_ROWS = 100
 
 
 class SQLiteStore(StructureStore):
@@ -598,19 +599,9 @@ class SQLiteStore(StructureStore):
     ) -> List[Structure]:
         effective = statuses or ((status,) if status else None)
 
-        stmt = select(Structure).where(Structure.run == run_name)
+        where = [Structure.run == run_name]
         if effective:
-            stmt = stmt.where(Structure.status.in_([str(s) for s in effective]))
-
-        with self._session() as s:
-            structs = list(s.scalars(stmt).all())
-            phonon_freq = dict(
-                s.execute(
-                    select(Phonon.structure_id, Phonon.min_phonon_freq).where(
-                        Phonon.run == run_name
-                    )
-                ).all()
-            )
+            where.append(Structure.status.in_([str(s) for s in effective]))
 
         try:
             meta = self.get_run_metadata(run_name)
@@ -622,15 +613,34 @@ class SQLiteStore(StructureStore):
             )
             cfg = SearchConfig()
 
-        total = len(structs)
-        for i, st in enumerate(structs):
-            if progress_callback is not None:
-                progress_callback(i + 1, total, f"Processing structure {i + 1}/{total}...")
-
-            st.min_phonon_freq = phonon_freq.get(st.id)
-            st.pressure_gpa = cfg.pressure_gpa
-            st.domain = cfg.domain
-            st.symprec = symprec
+        structs: List[Structure] = []
+        with self._session() as s:
+            phonon_freq = dict(
+                s.execute(
+                    select(Phonon.structure_id, Phonon.min_phonon_freq).where(
+                        Phonon.run == run_name
+                    )
+                ).all()
+            )
+            total = int(
+                s.scalar(select(func.count()).select_from(Structure).where(*where))
+                or 0
+            )
+            
+            rows = s.scalars(
+                select(Structure)
+                .where(*where)
+                .execution_options(yield_per=_LOAD_BATCH_ROWS)
+            )
+            for st in rows:
+                st.min_phonon_freq = phonon_freq.get(st.id)
+                st.pressure_gpa = cfg.pressure_gpa
+                st.domain = cfg.domain
+                st.symprec = symprec
+                structs.append(st)
+                if progress_callback is not None:
+                    n = len(structs)
+                    progress_callback(n, total, f"Loading structures {n}/{total}...")
         return structs
 
     def count(self) -> int:

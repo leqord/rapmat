@@ -368,7 +368,6 @@ def test_redraw_does_not_recompute_the_spacegroup(view_env, monkeypatch):
     screen._spg = None
     screen._refresh_info()
     baseline = len(calls)
-    assert baseline > 0
 
     for _ in range(20):
         screen.keypress((), "right")

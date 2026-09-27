@@ -854,6 +854,94 @@ class TestScreenBuildSmoke:
 
         assert "0.00" in s._format_row(s._results[0])
 
+    def _make_si_run(self, name: str, n: int):
+        from ase.build import bulk
+        from conftest import add_relaxed_structure
+
+        state, router = self._make_mem_env()
+        state.store.create_study(name, "Si", "bulk", "mock")
+        state.store.create_run(name=f"{name}-run", study_id=name)
+        for i in range(n):
+            add_relaxed_structure(
+                state.store, f"{name}-run", bulk("Si", "diamond", a=5.43),
+                -5.0 - i, f"{name}-run/{i}",
+            )
+        state.active_run = f"{name}-run"
+        return state, router
+
+    def test_results_fetch_labels_spacegroups_with_progress(self, monkeypatch):
+        import rapmat.storage.models as models
+        from rapmat.tui.screens.results import ResultsScreen
+
+        state, router = self._make_si_run("sg", 3)
+
+        messages = []
+        s = ResultsScreen(state, router)
+        s._fetch_data(progress_callback=lambda cur, total, msg="", *a: messages.append(msg))
+        assert "Loading structures 3/3..." in messages
+        assert messages[-1] == "Determining space groups 3/3..."
+
+        calls = []
+        real = models.format_spg
+
+        def counted(atoms, symprec=1e-3):
+            calls.append(atoms)
+            return real(atoms, symprec=symprec)
+
+        monkeypatch.setattr(models, "format_spg", counted)
+        for r in s._results:
+            s._format_row(r)
+        assert calls == []
+
+    def test_results_loading_panel_timeline(self, monkeypatch):
+        import threading
+
+        from rapmat.tui.screens.results import ResultsScreen
+
+        state, router = self._make_si_run("paint", 2)
+
+        release = threading.Event()
+        real_fetch = ResultsScreen._fetch_data
+
+        def gated_fetch(self, progress_callback=None):
+            release.wait(timeout=30)
+            real_fetch(self, progress_callback=progress_callback)
+
+        monkeypatch.setattr(ResultsScreen, "_fetch_data", gated_fetch)
+
+        alarms: list = []
+        painted: list = []
+        s: ResultsScreen
+
+        def status() -> str:
+            filler = s._outer_placeholder.original_widget
+            return filler.original_widget.original_widget._status_text.text
+
+        class _FakeLoop:
+            def set_alarm_in(self, _delay, callback, data=None):
+                alarms.append((callback, data))
+
+            def draw_screen(self):
+                painted.append((s._main_frame, status()))
+
+        def poll() -> None:
+            callback, data = alarms.pop()
+            callback(state.loop, data)
+
+        state.loop = _FakeLoop()
+        s = ResultsScreen(state, router)
+        s.build()
+
+        poll()
+        assert status() == "Loading structures from database..."
+
+        release.set()
+        s._loading_task._thread.join(timeout=30)
+        poll()
+
+        assert painted == [(None, "Building table...")]
+        assert s._outer_placeholder.original_widget is s._main_frame
+
     def test_apply_to_db_paints_modal_before_work(self):
         from rapmat.core.dedup_analysis import DedupSimulationResult
         from rapmat.tui.screens.dedup import DedupScreen

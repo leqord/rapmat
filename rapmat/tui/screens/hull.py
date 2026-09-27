@@ -153,7 +153,8 @@ class PhaseAnalysisScreen(BaseResultsScreen):
         )
 
         structures, _system, use_enthalpy = collect_study_structures(
-            store, str(study_id), symprec=symprec
+            store, str(study_id), symprec=symprec,
+            progress_callback=progress_callback,
         )
 
         kept = hull_input(
@@ -181,9 +182,6 @@ class PhaseAnalysisScreen(BaseResultsScreen):
                 hull_cutoff=self._hull_cutoff,
             )
 
-        if progress_callback is not None:
-            progress_callback(1, 1, f"Done - {len(sd)} structures")
-
         box.update(
             {
                 "study_id": str(study_id),
@@ -195,6 +193,7 @@ class PhaseAnalysisScreen(BaseResultsScreen):
             }
         )
         self._apply_fetch_result(box)
+        self._label_spacegroups(progress_callback)
 
     def _columns_def(self) -> list[tuple[str, int]]:
         epa_label = "H/A" if self._use_enthalpy else "E/A"

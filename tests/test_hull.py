@@ -245,6 +245,19 @@ def test_build_phase_diagram_no_intermediates(tmp_path):
         build_phase_diagram(structs, system)
 
 
+def test_collect_study_structures_reports_cumulative_progress(hull_store):
+    calls = []
+    structs, _system, _ = collect_study_structures(
+        hull_store, "test-study",
+        progress_callback=lambda cur, total, msg="", *a: calls.append((cur, total, msg)),
+    )
+    n = len(structs)
+    assert len(hull_store.get_study_runs("test-study")) > 1
+    assert [cur for cur, _, _ in calls] == list(range(1, n + 1))
+    assert all(total == n for _, total, _ in calls)
+    assert calls[-1][2] == f"Loading structures {n}/{n}..."
+
+
 def test_collect_study_structures_study_not_found(tmp_path):
     store = SQLiteStore.from_path(tmp_path / "empty")
     with pytest.raises(ValueError, match="not found"):

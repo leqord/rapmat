@@ -292,6 +292,40 @@ def test_get_structures_progress_callback(store):
     assert all(total == n_records for _, total in calls)
 
 
+def test_get_structures_progress_follows_decoding(store, monkeypatch):
+    import rapmat.storage.sqlite_store as sqlite_store
+    import rapmat.storage.types as types
+
+    store.create_study("stream-study", "Si", "bulk", "mattersim")
+    store.create_run(name="stream-run", study_id="stream-study")
+
+    atoms = bulk("Si", "diamond", a=5.43)
+    for i in range(1, 6):
+        sid = add_generated_candidate(store, "stream-run", f"stream-run/{i}", atoms)
+        store.update_structure(
+            sid, "relaxed", atoms=atoms,
+            metadata={"energy_per_atom": -5.0, "fmax": 0.01, "converged": True},
+        )
+
+    decoded = []
+    real_decode = types.ase_decode
+
+    def counting_decode(raw):
+        decoded.append(raw)
+        return real_decode(raw)
+
+    monkeypatch.setattr(types, "ase_decode", counting_decode)
+    monkeypatch.setattr(sqlite_store, "_LOAD_BATCH_ROWS", 2)
+
+    decoded_at_report = []
+    store.get_structures(
+        "stream-run", status="relaxed",
+        progress_callback=lambda *a: decoded_at_report.append(len(decoded)),
+    )
+    assert len(decoded_at_report) == 5
+    assert decoded_at_report[0] < decoded_at_report[-1]
+
+
 def test_mark_duplicates_progress_callback(store):
     store.create_study("dup-study", "Si", "bulk", "mattersim")
     store.create_run(name="dup-run", study_id="dup-study")

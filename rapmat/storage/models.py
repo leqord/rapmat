@@ -109,6 +109,7 @@ class Structure(Base):
     pressure_gpa = 0.0
     domain = "bulk"
     symprec = 1e-3
+    _spg_cache = None
 
     _TRANSIENT = ("descriptor", "min_phonon_freq", "pressure_gpa", "domain", "symprec")
     _PY_DEFAULTS = {
@@ -169,13 +170,24 @@ class Structure(Base):
         atoms = self.atoms
         return atoms.info.get("forces") if atoms is not None else None
 
+    def _spg_label(self, stage: str, atoms: Atoms | None) -> str:
+        cache = self._spg_cache
+        if cache is None:
+            cache = self._spg_cache = {}
+        hit = cache.get(stage)
+        if hit is not None and hit[0] is atoms and hit[1] == self.symprec:
+            return hit[2]
+        label = format_spg(atoms, symprec=self.symprec)
+        cache[stage] = (atoms, self.symprec, label)
+        return label
+
     @property
     def initial_spg(self) -> str:
-        return format_spg(self.initial_atoms, symprec=self.symprec)
+        return self._spg_label("initial", self.initial_atoms)
 
     @property
     def final_spg(self) -> str:
-        return format_spg(self.final_atoms, symprec=self.symprec)
+        return self._spg_label("final", self.final_atoms)
 
 
 class Evaluation(Base):

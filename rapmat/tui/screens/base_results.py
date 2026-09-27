@@ -285,12 +285,15 @@ class BaseResultsScreen(ScreenBase):
             )
 
         def _on_progress(current: int, total: int, message: str) -> None:
-            panel.set_progress(current, total, message)
+            if total:
+                panel.set_progress(current, total, message)
 
         def _on_log(line: str) -> None:
             panel.add_log(line)
 
         def _on_complete() -> None:
+            panel.set_progress(1, 1, "Building table...")
+            loop.draw_screen()
             self._main_frame = self._build_frame()
             if self._outer_placeholder is not None:
                 self._outer_placeholder.original_widget = self._main_frame
@@ -319,6 +322,14 @@ class BaseResultsScreen(ScreenBase):
 
     def _fetch_data(self, progress_callback=None) -> None:
         pass
+
+    def _label_spacegroups(self, progress_callback=None) -> None:
+        rows = self._get_display_results()
+        total = len(rows)
+        for i, result in enumerate(rows, 1):
+            result.final_spg
+            if progress_callback is not None:
+                progress_callback(i, total, f"Determining space groups {i}/{total}...")
 
     def _columns_def(self) -> list[tuple[str, int]]:
         return []

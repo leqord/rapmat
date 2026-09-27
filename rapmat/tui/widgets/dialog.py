@@ -92,6 +92,8 @@ class ModalDialog(urwid.WidgetWrap):
         message: str,
         parent: urwid.Widget,
         on_close: Callable[[], None],
+        *,
+        width: int = 50,
     ) -> "ModalDialog":
         dlg: ModalDialog | None = None
 
@@ -111,7 +113,7 @@ class ModalDialog(urwid.WidgetWrap):
                 urwid.Padding(ok_btn, align=urwid.CENTER, width=10),
             ]
         )
-        dlg = ModalDialog(title, body, parent)
+        dlg = ModalDialog(title, body, parent, width=width)
 
         def _esc() -> None:
             dlg._emit("close", True)

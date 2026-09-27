@@ -984,9 +984,99 @@ class TestScreenBuildSmoke:
 
         assert drawn_at, "modal was not drawn before work started"
         assert drawn_at[0] == 0
-        
+
         if s._task is not None and s._task._thread is not None:
             s._task._thread.join(timeout=2)
+
+    def _dedup_overlay(self, tmp_path, monkeypatch):
+        import numpy as np
+
+        from rapmat.core.dedup_analysis import DedupSimulationResult
+        from rapmat.tui.screens.dedup import DedupScreen
+        from rapmat.tui.widgets.status_bar import StatusBar
+
+        monkeypatch.chdir(tmp_path)
+        state, router = self._make_mem_env()
+        state.status_bar = StatusBar()
+        drawn: list = []
+
+        class _FakeLoop:
+            def set_alarm_in(self, *a, **k):
+                return None
+
+            def draw_screen(self):
+                drawn.append(
+                    ((tmp_path / "dedup_r_relaxed.png").exists(),
+                     state.status_bar._message)
+                )
+
+        state.loop = _FakeLoop()
+        s = DedupScreen(state, router)
+        s.build()
+        d = dict(
+            sim=DedupSimulationResult(total=3, kept=3), n_structs=3, n_pairs=3,
+            min_dist=0.1, max_dist=0.9, mean_dist=0.5, median_dist=0.5,
+            std_dist=0.3, below_thresh=1, threshold=0.2, metric="euclidean",
+            percentiles=[(50, 0.5, 2)], distances=np.array([0.1, 0.5, 0.9]),
+            stage="relaxed", run_name="r", use_pymatgen=False, use_forces=False,
+        )
+        s._result_data = d
+        s._show_results_overlay(d)
+        return s, state, drawn
+
+    @staticmethod
+    def _body_text(s) -> str:
+        canvas = s._frame.body.render((250, 30), focus=True)
+        return b"\n".join(canvas.text).decode()
+
+    def test_save_plot_shows_path_dialog(self, tmp_path, monkeypatch):
+        from rapmat.tui.widgets.dialog import ModalDialog
+
+        s, state, drawn = self._dedup_overlay(tmp_path, monkeypatch)
+        plot = tmp_path / "dedup_r_relaxed.png"
+
+        s._save_plot()
+
+        assert drawn[0] == (False, "Saving plot...")
+        assert plot.exists()
+        assert isinstance(s._frame.body, ModalDialog)
+        text = self._body_text(s)
+        assert "Plot Saved" in text
+        assert str(plot) in text
+        assert "Replaced" not in text
+
+        s._frame.body._esc_handler()
+        assert s._frame.body is s._results_overlay
+        assert state.status_bar._message == f"Plot saved to {plot}"
+
+        s._save_plot()
+        assert "Replaced the existing file." in self._body_text(s)
+
+    @pytest.mark.parametrize(
+        ("exc", "shown"),
+        [(OSError("disk full"), "disk full"), (MemoryError(), "MemoryError")],
+    )
+    def test_save_plot_failure_shows_error_dialog(
+        self, tmp_path, monkeypatch, exc, shown
+    ):
+        import rapmat.core.dedup_analysis as dedup_analysis
+
+        def _fail(*_a, **_k):
+            raise exc
+
+        s, state, _drawn = self._dedup_overlay(tmp_path, monkeypatch)
+        monkeypatch.setattr(dedup_analysis, "plot_distance_histogram", _fail)
+
+        s._save_plot()
+
+        text = self._body_text(s)
+        assert "Save Failed" in text
+        assert str(tmp_path / "dedup_r_relaxed.png") in text
+        assert shown in text
+        assert state.status_bar._message == f"Plot error: {shown}"
+
+        s._frame.body._esc_handler()
+        assert s._frame.body is s._results_overlay
 
     def test_phase_analysis_screen(self):
         state, router = self._make_mem_env()

@@ -597,7 +597,13 @@ class DedupScreen(ScreenBase):
         from rapmat.core.dedup_analysis import plot_distance_histogram
 
         d = self._result_data
-        plot_path = Path(f"dedup_{d['run_name']}_{d['stage']}.png")
+        plot_path = Path.cwd() / f"dedup_{d['run_name']}_{d['stage']}.png"
+        replaced = plot_path.exists()
+
+        self.refresh_footer("Saving plot...")
+        if self._state.loop is not None:
+            self._state.loop.draw_screen()
+
         try:
             plot_distance_histogram(
                 d["distances"],
@@ -606,11 +612,29 @@ class DedupScreen(ScreenBase):
                 title=f"Pairwise Distance Distribution - {d['run_name']} ({d['stage']})",
                 axis_label=self._metrics[d["metric"]].axis,
             )
-            if self._state.status_bar:
-                self._state.status_bar.set_message(f"Plot saved to {plot_path}")
-        except Exception as e:
-            if self._state.status_bar:
-                self._state.status_bar.set_message(f"Plot error: {e}")
+        except Exception as exc:
+            error = str(exc) or type(exc).__name__
+            title = "Save Failed"
+            message = f"Could not save the plot to:\n\n  {plot_path}\n\n  {error}"
+            footer = f"Plot error: {error}"
+        else:
+            title = "Plot Saved"
+            message = f"Deduplication plot saved to:\n\n  {plot_path}"
+            if replaced:
+                message += "\n\nReplaced the existing file."
+            footer = f"Plot saved to {plot_path}"
+
+        def _factory(parent: urwid.Widget, close) -> urwid.Widget:
+            def _close() -> None:
+                close()
+                self.refresh_footer(footer)
+
+            return ModalDialog.info(
+                title, message, parent, on_close=_close, width=70
+            )
+
+        self.show_dialog(_factory)
+        self.refresh_footer(footer)
 
     def _apply_to_db(self) -> None:
         if self._applying:

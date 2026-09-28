@@ -4,7 +4,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterator, List, Optional, Tuple
+from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
 from ase import Atoms
 from filelock import FileLock, Timeout
@@ -478,6 +478,9 @@ class SQLiteStore(StructureStore):
             "displacement": _opt_float(settings.get("displacement")),
             "symprec": _opt_float(settings.get("symprec")),
             "calculator": settings.get("calculator"),
+            "settings_json": (
+                json.dumps(settings, sort_keys=True) if settings else None
+            ),
         }
         with self._session() as s:
             stmt = sqlite_insert(Phonon).values(**values)
@@ -513,7 +516,33 @@ class SQLiteStore(StructureStore):
             displacement=row.displacement,
             symprec=row.symprec,
             calculator=row.calculator,
+            settings_json=row.settings_json,
         )
+
+    def get_phonon_settings(
+        self, run_names: Sequence[str]
+    ) -> dict[str, tuple[Optional[str], Optional[str]]]:
+        if not run_names:
+            return {}
+        with self._session() as s:
+            rows = s.execute(
+                select(Phonon.structure_id, Phonon.run, Phonon.settings_json).where(
+                    Phonon.run.in_(list(run_names))
+                )
+            ).all()
+        return {sid: (run, text) for sid, run, text in rows}
+
+    def delete_phonon_results(self, structure_ids: Sequence[str]) -> None:
+        ids = list(structure_ids)
+        BATCH = 500
+        for i in range(0, len(ids), BATCH):
+            batch = ids[i : i + BATCH]
+            with self._session() as s:
+                s.execute(delete(Phonon).where(Phonon.structure_id.in_(batch)))
+                s.execute(
+                    delete(PhononParams).where(PhononParams.structure_id.in_(batch))
+                )
+                s.commit()
 
     def mark_duplicates(
         self,

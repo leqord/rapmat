@@ -1,10 +1,13 @@
-from typing import List, Optional, Tuple
+from typing import Collection, List, Optional
 
-from rapmat.calculators import Calculators, ProgressCalcCallback
+from pydantic import BaseModel
+
+from rapmat.calculators import ProgressCalcCallback
 from rapmat.calculators.factory import (CalculatorProvider, finalize_provider,
                                         set_provider_label)
 from rapmat.core.entities import ResultRow
 from rapmat.core.phonon import calculate_phonons_with_freq, serialize_phonons
+from rapmat.core.phonon_settings import PhononSettings
 from rapmat.storage.base import StructureStore
 from rapmat.utils.common import workdir_context
 from rapmat.utils.console import get_logger
@@ -13,41 +16,58 @@ from rapmat.utils.progress import ProgressCallback
 _logger = get_logger("rapmat.phonon_stability")
 
 
+class PhononRunSummary(BaseModel):
+    targets: int = 0
+    computed: int = 0
+    skipped: int = 0
+    failed: int = 0
+    unsaved: int = 0
+
+    def describe(self) -> str:
+        parts = [f"{self.computed} computed"]
+        if self.skipped:
+            parts.append(f"{self.skipped} already stored")
+        if self.failed:
+            parts.append(f"{self.failed} failed")
+        if self.unsaved:
+            parts.append(f"{self.unsaved} not saved")
+        noun = "structure" if self.targets == 1 else "structures"
+        return f"Phonons for {self.targets} {noun}: {', '.join(parts)}."
+
+
 def compute_dynamical_stability_for_results(
     results: List[ResultRow],
     phonon_top: int,
-    phonon_cutoff: float,
-    phonon_supercell: Tuple[int, int, int],
-    phonon_mesh: Tuple[int, int, int],
-    phonon_displacement: float,
-    phonon_calculator: Calculators,
+    settings: PhononSettings,
     store: Optional["StructureStore"] = None,
-    calculator_config: dict | None = None,
     progress_callback: ProgressCallback | None = None,
-    symprec: float = 1e-3,
-    reduce_primitive: bool = True,
-    run_name: str | None = None,
-    auto_settings: bool = False,
-    monolayer: bool = False,
-) -> bool:
+    *,
+    calculator_command: str = "",
+    skip_ids: Collection[str] = (),
+    session_hint: str | None = None,
+) -> PhononRunSummary:
+    summary = PhononRunSummary()
     if phonon_top < 1:
-        return False
-    if not results:
-        return False
+        return summary
 
-    target_results: List[ResultRow] = []
-    for result in results:
-        if result.converged:
-            target_results.append(result)
-            if len(target_results) >= phonon_top:
-                break
+    targets = [r for r in results if r.converged and r.atoms is not None][:phonon_top]
+    todo = [r for r in targets if r.structure_id not in skip_ids]
+    summary.targets = len(targets)
+    summary.skipped = len(targets) - len(todo)
+    if not todo:
+        return summary
 
-    if not target_results:
-        return False
+    domains = {r.structure.domain for r in todo}
+    if len(domains) > 1:
+        raise ValueError(
+            f"Phonon targets mix domains ({', '.join(sorted(domains))})"
+        )
+    monolayer = domains == {"monolayer"}
 
-    with workdir_context(None, session_hint=run_name) as wdir:
-        updated = False
-        total = len(target_results)
+    stored_settings = settings.model_dump(mode="json")
+
+    with workdir_context(None, session_hint=session_hint) as wdir:
+        total = len(todo)
 
         _bar = {"current": 0}
 
@@ -56,25 +76,21 @@ def compute_dynamical_stability_for_results(
                 progress_callback(_bar["current"], total, message)
 
         calculator_for = CalculatorProvider(
-            phonon_calculator,
+            settings.calculator,
             wdir,
-            config=calculator_config,
+            config=settings.run_config(calculator_command),
             callback=ProgressCalcCallback(_sub_progress),
-            auto_settings=auto_settings,
+            auto_settings=settings.calculator_settings == "auto",
             monolayer=monolayer,
             log_callback=lambda msg: _sub_progress(0, 0, msg),
         )
 
-        calc_name = phonon_calculator.value
-
-        def _persist(result: ResultRow, phonons, min_freq: float) -> None:
+        def _persist(result: ResultRow, phonons, min_freq: float) -> bool:
             sid = result.structure_id
-            rname = result.run_name or run_name
-            if rname is None:
-                _logger.warning(
-                    "No run name for %s; skipping phonon persistence.", sid
-                )
-                return
+            run = result.structure.run
+            if not run:
+                _logger.warning("No run for %s, phonon result not saved.", sid)
+                return False
 
             blob = None
             try:
@@ -85,61 +101,47 @@ def compute_dynamical_stability_for_results(
                 )
             try:
                 store.save_phonon_result(
-                    sid,
-                    rname,
-                    min_freq,
-                    params_gz=blob,
-                    settings={
-                        "supercell": [int(x) for x in phonon_supercell],
-                        "mesh": [int(x) for x in phonon_mesh],
-                        "displacement": float(phonon_displacement),
-                        "symprec": float(symprec),
-                        "calculator": calc_name,
-                    },
+                    sid, run, min_freq, params_gz=blob, settings=stored_settings
                 )
             except Exception as exc:
                 _logger.warning(
                     "Could not persist phonon result for %s: %s", sid, exc
                 )
+                return False
+            return True
 
         def _process_one(result: ResultRow) -> None:
-            nonlocal updated
-            atoms = result.atoms
-            if atoms is None:
-                result.structure.min_phonon_freq = None
-                result.dynamical_stability = None
-                return
-
             set_provider_label(calculator_for, result.structure_id)
 
             try:
                 phonons, min_freq = calculate_phonons_with_freq(
-                    atoms,
+                    result.atoms,
                     calculator_for=calculator_for,
-                    displacement=phonon_displacement,
-                    supercell=phonon_supercell,
-                    qpoint_mesh=phonon_mesh,
-                    reduce_primitive=reduce_primitive,
-                    symprec=symprec,
+                    displacement=settings.displacement,
+                    supercell=settings.supercell,
+                    qpoint_mesh=settings.mesh,
+                    reduce_primitive=settings.reduce_primitive,
+                    symprec=settings.symprec,
                     progress_callback=_sub_progress,
                 )
-                result.structure.min_phonon_freq = min_freq
-                result.dynamical_stability = not (min_freq < phonon_cutoff)
-                if store is not None and result.structure_id:
-                    _persist(result, phonons, min_freq)
-                updated = True
             except Exception as e:
                 _logger.error(
-                    "Phonon calc failed for ID %s: %s",
-                    result.index, e,
+                    "Phonon calc failed for %s: %s",
+                    result.structure_id, e,
                     exc_info=True,
                 )
                 result.structure.min_phonon_freq = None
-                result.dynamical_stability = None
-                updated = True
+                summary.failed += 1
+                return
+
+            result.structure.min_phonon_freq = min_freq
+            summary.computed += 1
+            if store is not None and result.structure_id:
+                if not _persist(result, phonons, min_freq):
+                    summary.unsaved += 1
 
         try:
-            for i, result in enumerate(target_results):
+            for i, result in enumerate(todo):
                 _bar["current"] = i
                 msg = f"Structure {i + 1}/{total}: {result.formula}"
                 if progress_callback is not None:
@@ -151,4 +153,4 @@ def compute_dynamical_stability_for_results(
         if progress_callback is not None:
             progress_callback(total, total, "Done")
 
-        return updated
+    return summary

@@ -48,6 +48,7 @@ class PhononResult(BaseModel):
     displacement: float | None = None
     symprec: float | None = None
     calculator: str | None = None
+    settings_json: str | None = None
 
 
 class ResultRow(BaseModel):

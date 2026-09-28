@@ -3,6 +3,7 @@ from pathlib import Path
 
 from rapmat.core.config import SearchConfig
 from rapmat.core.entities import ResultRow
+from rapmat.core.phonon_settings import resolve_phonon_cutoff
 from rapmat.tui.keymap import KeyBinding
 from rapmat.tui.router import ScreenRouter
 from rapmat.tui.screens.base_results import (
@@ -94,7 +95,9 @@ class PhaseAnalysisScreen(BaseResultsScreen):
 
         study = box.get("study")
         study_cfg = study.search_config if study else SearchConfig()
-        self._phonon_cutoff = study_cfg.phonon_cutoff
+        self._phonon_cutoff = resolve_phonon_cutoff(
+            self._state.store, self._study_id or None, self._phonon_clear_target()
+        )
         self._pressure_gpa = study_cfg.pressure_gpa
 
         sd = box.get("sd", [])
@@ -323,11 +326,8 @@ class PhaseAnalysisScreen(BaseResultsScreen):
     def _save_ident(self, result: ResultRow) -> str:
         return f"{self._study_id}_{result.index}_{result.structure_id}"
 
-    def _on_phonon_complete(self, phonon_cutoff: float) -> None:
-
-        self._state.store.set_study_config_value(
-            self._study_id, "phonon_cutoff", phonon_cutoff
-        )
+    def _phonon_scope(self) -> tuple[str | None, list[str]]:
+        return self._study_id or None, self._phonon_clear_target()
 
     def _phonon_clear_target(self) -> list[str]:
         runs = self._state.store.get_study_runs(self._study_id)

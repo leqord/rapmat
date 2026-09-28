@@ -159,6 +159,7 @@ def build_phase_diagram(
         structure_data.append(
             ResultRow(
                 structure=s,
+                run_name=s.run or "",
                 effective_per_atom=epa,
                 formation_energy=formation_energy,
                 reduced_formula=reduced,
@@ -204,6 +205,7 @@ def build_energy_ranking(
     structure_data = [
         ResultRow(
             structure=s,
+            run_name=s.run or "",
             effective_per_atom=_effective_epa(s, use_enthalpy),
             reduced_formula=Composition(s.formula).reduced_formula,
         )

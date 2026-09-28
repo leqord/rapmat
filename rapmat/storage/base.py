@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional, Sequence, Tuple
 
 from ase import Atoms
 
@@ -91,6 +91,14 @@ class StructureStore(ABC):
 
     @abstractmethod
     def get_phonon_result(self, structure_id: str) -> Optional["PhononResult"]: ...
+
+    @abstractmethod
+    def get_phonon_settings(
+        self, run_names: Sequence[str]
+    ) -> dict[str, tuple[Optional[str], Optional[str]]]: ...
+
+    @abstractmethod
+    def delete_phonon_results(self, structure_ids: Sequence[str]) -> None: ...
 
     @abstractmethod
     def mark_duplicates(

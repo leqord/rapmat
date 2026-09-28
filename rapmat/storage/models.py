@@ -231,6 +231,7 @@ class Phonon(Base):
     displacement: Mapped[Optional[float]] = mapped_column(Float)
     symprec: Mapped[Optional[float]] = mapped_column(Float)
     calculator: Mapped[Optional[str]] = mapped_column(Text)
+    settings_json: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class PhononParams(Base):

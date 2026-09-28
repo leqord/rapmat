@@ -218,15 +218,17 @@ class PhononDispersionScreen(ScreenBase):
 
                 cancel_flag = [False]
 
-                def _phony_check():
+                def _relax_progress(_step: int, _max_steps: int, message: str) -> None:
                     if progress.cancelled:
                         cancel_flag[0] = True
+                    progress.update(2, 5, f"Pre-relaxing: {message}")
 
                 converged, relaxed = structure_relax(
                     structure,
                     force_conv_crit=vals.get("force_conv_crit", 1e-3),
                     steps_max=vals.get("steps_max", 10000),
                     cancel_flag=cancel_flag,
+                    progress_callback=_relax_progress,
                 )
                 if progress.cancelled or cancel_flag[0]:
                     raise KeyboardInterrupt("Cancelled by user")
@@ -255,12 +257,18 @@ class PhononDispersionScreen(ScreenBase):
 
             progress.update(3, 5, "Computing phonons")
             progress.log("Computing phonon dispersion...")
+
+            def _phonon_progress(_current: int, _total: int, message: str = "") -> None:
+                if progress.cancelled:
+                    raise KeyboardInterrupt("Cancelled by user")
+                progress.update(3, 5, message)
+
             phonons = structure_calculate_phonons(
                 structure,
                 displacement,
                 supercell,
                 qpoint_mesh,
-                progress_callback=progress.update,
+                progress_callback=_phonon_progress,
                 calculator_for=calculator_for,
             )
 

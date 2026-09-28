@@ -1,7 +1,7 @@
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Collection, Optional
 
 import urwid
 
@@ -249,6 +249,7 @@ class BaseResultsScreen(ScreenBase):
         self._details_panel: urwid.Widget | None = None
         self._body_pile: urwid.Pile | None = None
         self._phonon_task: "BackgroundTask | None" = None
+        self._phonon_panel: ProgressPanel | None = None
 
         self._outer_placeholder: urwid.WidgetPlaceholder | None = None
         self._loading_task: "BackgroundTask | None" = None
@@ -357,34 +358,35 @@ class BaseResultsScreen(ScreenBase):
             return f"{result.run_name}_{result.index}"
         return str(result.index)
 
-    def _on_phonon_complete(self, phonon_cutoff: float) -> None:
-        pass
+    def _phonon_scope(self) -> tuple[str | None, list[str]]:
+        # NOTE: (study, its runs), phonon settings are kept consistent across all of them
+        raise NotImplementedError
 
     def _phonon_clear_target(self) -> list[str]:
         return []
 
-    def _reset_inmemory_phonon(self) -> None:
+    def _has_phonon_data(self) -> bool:
+        return any(
+            r.min_phonon_freq is not None or r.dynamical_stability is not None
+            for r in self._results
+        )
+
+    def _reset_inmemory_phonon(self, ids: "Collection[str] | None" = None) -> None:
         for r in self._results:
-            r.structure.min_phonon_freq = None
-            r.dynamical_stability = None
-
-    def _wipe_phonon_results(self) -> None:
-        store = self._state.store
-        for run_name in self._phonon_clear_target():
-            store.clear_run_phonon_results(run_name)
-        self._reset_inmemory_phonon()
-
-    def _invalidate_phonon_before_run(self) -> None:
-        self._wipe_phonon_results()
+            if ids is None or r.structure_id in ids:
+                r.structure.min_phonon_freq = None
+                r.dynamical_stability = None
 
     def _clear_phonon_results(self) -> None:
+        store = self._state.store
         try:
-            self._wipe_phonon_results()
+            for run_name in self._phonon_clear_target():
+                store.clear_run_phonon_results(run_name)
         except Exception as exc:
             self._show_message(f"Clear failed: {exc}")
             return
-        self._show_dynamical_stability = False
-        self._phonon_cutoff = None
+        self._reset_inmemory_phonon()
+        self._show_dynamical_stability = self._has_phonon_data()
         self._rebuild_table()
         if self._table is not None:
             self._update_details(self._table.get_focused_row())
@@ -877,8 +879,6 @@ class BaseResultsScreen(ScreenBase):
                                              text_field)
 
         ident = self._save_ident(result).replace("/", "_")
-        run_name = getattr(self, "_run_name", None)
-        meta = self._state.store.get_run_metadata(run_name) if run_name else None
 
         form = FormGroup(
             [
@@ -888,7 +888,7 @@ class BaseResultsScreen(ScreenBase):
                 ),
                 checkbox_field(
                     "monolayer", "Monolayer",
-                    default=bool(meta and meta.domain == "monolayer"),
+                    default=result.structure.domain == "monolayer",
                 ),
             ],
             label_width=12,
@@ -1078,6 +1078,14 @@ class BaseResultsScreen(ScreenBase):
             ),
         ]
 
+    def _phonon_running(self) -> bool:
+        return self._phonon_task is not None and self._phonon_task.is_running
+
+    def esc_label(self) -> str:
+        if self._phonon_running():
+            return "Cancel"
+        return super().esc_label()
+
     def _on_esc(self) -> bool:
         if self._search_query:
             self._search_query = ""
@@ -1085,10 +1093,21 @@ class BaseResultsScreen(ScreenBase):
             self._show_message("")
             return True
 
+        if self._phonon_running():
+            if not self._phonon_task.cancelled:
+                self._phonon_task.cancel()
+                if self._phonon_panel is not None:
+                    self._phonon_panel.set_cancelling()
+                self._show_message("Cancelling the phonon calculation...")
+            return True
+
         return super()._on_esc()
 
     def _action_phonon(self) -> None:
         if self._main_frame is None:
+            return
+        if self._phonon_running():
+            self._show_message("A phonon calculation is already running.")
             return
         if not any(r.converged for r in self._results):
             self._show_message(
@@ -1096,17 +1115,25 @@ class BaseResultsScreen(ScreenBase):
             )
             return
 
+        from pydantic import ValidationError
+
+        from rapmat.core.phonon_settings import (load_stored_phonons,
+                                                 split_stored)
         from rapmat.tui.widgets.calc_fields import (
             CALCULATOR_FIELD_KEYS,
             calculator_fields,
             parse_toml_config,
             phonon_fields,
+            phonon_settings_from_values,
             remember_vasp_command,
             setup_calculator_signals,
             validate_calculator,
         )
         from rapmat.tui.widgets.form import (FormGroup, dropdown_field,
                                              int_field)
+
+        store = self._state.store
+        study_id, run_names = self._phonon_scope()
 
         form = FormGroup(
             fields=[
@@ -1132,6 +1159,9 @@ class BaseResultsScreen(ScreenBase):
             ],
         )
 
+        form.set_values(
+            self._phonon_dialog_values(load_stored_phonons(store, run_names))
+        )
         setup_calculator_signals(form)
 
         def _factory(parent, close):
@@ -1144,11 +1174,34 @@ class BaseResultsScreen(ScreenBase):
                 if calc_err:
                     dlg.set_error(calc_err)
                     return
+                if int(vals.get("top_n", 0)) < 1:
+                    dlg.set_error("Top N must be at least 1.")
+                    return
                 vals["calculator_config_dict"] = parse_toml_config(vals)[0]
-                remember_vasp_command(vals)
+                try:
+                    settings = phonon_settings_from_values(vals)
+                except ValidationError as exc:
+                    err = exc.errors()[0]
+                    field = ".".join(str(part) for part in err["loc"])
+                    dlg.set_error(f"Invalid {field}: {err['msg']}")
+                    return
 
-                close()
-                self._start_phonon_task(vals)
+                stored = load_stored_phonons(store, run_names)
+                matching, stale = split_stored(stored, settings)
+
+                def _go() -> None:
+                    close()
+                    remember_vasp_command(vals)
+                    self._start_phonon_task(vals, settings, matching, stale)
+
+                if not stale:
+                    _go()
+                    return
+                self.confirm_dialog(
+                    "Replace phonon results",
+                    _stale_phonon_message(stored, stale, settings, study_id),
+                    _go,
+                )
 
             def _on_clear() -> None:
                 close()
@@ -1171,53 +1224,102 @@ class BaseResultsScreen(ScreenBase):
 
         self.show_dialog(_factory)
 
+    def _phonon_defaults(self) -> dict:
+        from rapmat.core.config import SearchConfig
+        from rapmat.core.phonon_settings import default_phonon_grid
+        from rapmat.tui.widgets.calc_fields import SETTINGS_AUTO, SETTINGS_TOML
+
+        store = self._state.store
+        study_id, run_names = self._phonon_scope()
+        study = store.get_study(study_id) if study_id else None
+        if study is not None:
+            cfg = study.search_config
+        else:
+            meta = store.get_run_metadata(run_names[0]) if run_names else None
+            cfg = meta.search_config if meta else SearchConfig()
+
+        supercell, mesh = default_phonon_grid(cfg.domain)
+        return {
+            "calculator": cfg.calculator.upper(),
+            "calculator_settings": (
+                SETTINGS_AUTO if cfg.calculator_settings == "auto" else SETTINGS_TOML
+            ),
+            "phonon_supercell": supercell,
+            "phonon_mesh": mesh,
+        }
+
+    def _phonon_dialog_values(self, stored) -> dict:
+        from rapmat.core.phonon_settings import (DEFAULT_PHONON_CUTOFF,
+                                                 prevailing_settings)
+        from rapmat.tui.widgets.calc_fields import phonon_settings_to_values
+
+        known = prevailing_settings(stored)
+        vals = phonon_settings_to_values(known) if known else self._phonon_defaults()
+        vals["phonon_cutoff"] = (
+            self._phonon_cutoff
+            if self._phonon_cutoff is not None
+            else DEFAULT_PHONON_CUTOFF
+        )
+        return vals
+
     def _confirm_clear_phonons(self) -> None:
-        if not self._show_dynamical_stability:
+        run_names = self._phonon_clear_target()
+        stored = self._state.store.get_phonon_settings(run_names)
+        if not stored:
             self._show_message("No phonon results to clear.")
             return
 
+        n_runs = len({run for run, _text in stored.values() if run})
         self.confirm_dialog(
             "Clear phonon results",
-            "Delete all stored phonon data for this view?",
+            f"Delete {_plural(len(stored), 'stored phonon result')} "
+            f"in {_plural(n_runs, 'run')}?",
             self._clear_phonon_results,
         )
 
-    def _start_phonon_task(self, vals: dict) -> None:
+    def _start_phonon_task(
+        self,
+        vals: dict,
+        settings,
+        skip_ids: set[str],
+        stale: dict[str, str | None],
+    ) -> None:
+        loop = self._state.loop
         if self._main_frame is None or self._body_pile is None:
             return
+        if loop is None:
+            self._show_message("Cannot start background task: no event loop.")
+            return
 
-        self._invalidate_phonon_before_run()
-
-        from rapmat.calculators import Calculators
+        from rapmat.core.phonon_settings import (DEFAULT_PHONON_CUTOFF,
+                                                 save_phonon_cutoff)
         from rapmat.core.phonon_stability import \
             compute_dynamical_stability_for_results
         from rapmat.tui.tasks import BackgroundTask
         from rapmat.tui.widgets.progress import ProgressPanel
 
+        store = self._state.store
+        study_id, run_names = self._phonon_scope()
+
+        if stale:
+            try:
+                store.delete_phonon_results(list(stale))
+            except Exception as exc:
+                self._show_message(f"Could not delete old phonon results: {exc}")
+                return
+            self._reset_inmemory_phonon(set(stale))
+
+        cutoff = float(vals.get("phonon_cutoff", DEFAULT_PHONON_CUTOFF))
+        save_phonon_cutoff(store, study_id, run_names, cutoff)
+        self._phonon_cutoff = cutoff
+        self._show_dynamical_stability = self._has_phonon_data()
+        self._rebuild_table()
+
         top_n = int(vals.get("top_n", 5))
-        calc_name = vals.get("calculator", Calculators.MATTERSIM.value)
-        supercell = vals.get("phonon_supercell", (3, 3, 3))
-        mesh = vals.get("phonon_mesh", (20, 20, 20))
-        displacement = float(vals.get("phonon_displacement", 0.01))
-        cutoff = float(vals.get("phonon_cutoff", -0.15))
-        reduce_prim = bool(vals.get("reduce_prim", True))
-        phonon_symprec = float(vals.get("phonon_symprec", DEFAULT_SYMPREC))
-
-        from rapmat.tui.widgets.calc_fields import (calculator_run_config,
-                                                    is_auto_settings)
-
-        calc_config = calculator_run_config(vals)
-        auto_settings = is_auto_settings(vals)
-        run_name = getattr(self, "_run_name", None)
-        meta = self._state.store.get_run_metadata(run_name) if run_name else None
-        monolayer = bool(meta and meta.domain == "monolayer")
-
-        try:
-            calc_enum = Calculators(calc_name)
-        except ValueError:
-            calc_enum = Calculators.MATTERSIM
+        command = vals.get("vasp_command", "").strip()
 
         panel = ProgressPanel(title=" Phonon Calculation ")
+        self._phonon_panel = panel
         panel.set_progress(0, top_n)
         panel.add_log(f"Starting phonon calculation for top {top_n} structures...")
 
@@ -1231,28 +1333,19 @@ class BaseResultsScreen(ScreenBase):
             results_snapshot = list(self._get_display_results())
         else:
             results_snapshot = list(self._results)
-        store = self._state.store
-        phonon_cutoff = (
-            self._phonon_cutoff if self._phonon_cutoff is not None else cutoff
-        )
+
+        box: dict = {}
 
         def _worker(progress) -> None:
-            compute_dynamical_stability_for_results(
+            box["summary"] = compute_dynamical_stability_for_results(
                 results=results_snapshot,
                 phonon_top=top_n,
-                phonon_cutoff=phonon_cutoff,
-                phonon_supercell=supercell,
-                phonon_mesh=mesh,
-                phonon_displacement=displacement,
-                phonon_calculator=calc_enum,
+                settings=settings,
                 store=store,
-                calculator_config=calc_config,
                 progress_callback=progress.as_callback(),
-                symprec=phonon_symprec,
-                reduce_primitive=reduce_prim,
-                run_name=run_name,
-                auto_settings=auto_settings,
-                monolayer=monolayer,
+                calculator_command=command,
+                skip_ids=skip_ids,
+                session_hint=study_id or (run_names[0] if run_names else None),
             )
 
         def _on_progress(current: int, total: int, message: str) -> None:
@@ -1261,11 +1354,9 @@ class BaseResultsScreen(ScreenBase):
         def _on_log(line: str) -> None:
             panel.add_log(line)
 
-        def _on_complete() -> None:
-            panel.set_finished(True, "Phonon calculation complete.")
-            self._show_dynamical_stability = True
-            self._phonon_cutoff = phonon_cutoff
-            self._on_phonon_complete(phonon_cutoff)
+        def _finish(message: str) -> None:
+            self._phonon_panel = None
+            self._show_dynamical_stability = self._has_phonon_data()
             self._rebuild_table()
 
             if self._body_pile is not None and self._details_panel is not None:
@@ -1273,16 +1364,23 @@ class BaseResultsScreen(ScreenBase):
                     self._details_panel,
                     self._body_pile.options("pack"),
                 )
-            self._show_message("Phonon calculation complete.")
+            self._show_message(message)
+
+        def _on_complete() -> None:
+            panel.set_finished(True, "Phonon calculation complete.")
+            summary = box.get("summary")
+            message = summary.describe() if summary else "Phonon calculation complete."
+            if summary is not None and summary.unsaved:
+                message += " See the log for why some were not saved."
+            _finish(message)
 
         def _on_error(error: str) -> None:
+            if self._phonon_task is not None and self._phonon_task.cancelled:
+                panel.set_finished(False, "Cancelled.")
+                _finish("Phonon calculation cancelled. Completed results were kept.")
+                return
             panel.set_finished(False, f"Error: {error}")
-            self._show_message(f"Failed: {error}")
-
-        loop = self._state.loop
-        if loop is None:
-            self._show_message("Cannot start background task: no event loop.")
-            return
+            _finish(f"Phonon calculation failed: {error}. Completed results were kept.")
 
         self._phonon_task = BackgroundTask(
             fn=_worker,
@@ -1293,3 +1391,39 @@ class BaseResultsScreen(ScreenBase):
             on_error=_on_error,
         )
         self._phonon_task.start()
+        self.refresh_footer()
+
+
+_SETTING_LABELS = {
+    "calculator": "calculator",
+    "calculator_settings": "settings mode",
+    "calculator_config": "TOML config",
+    "supercell": "supercell",
+    "mesh": "q-point mesh",
+    "displacement": "displacement",
+    "symprec": "symprec",
+    "reduce_primitive": "reduce to primitive",
+    "not recorded": "settings not recorded",
+}
+
+
+def _plural(n: int, noun: str) -> str:
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
+
+
+def _stale_phonon_message(stored, stale, settings, study_id) -> str:
+    from rapmat.core.phonon_settings import stale_differences
+
+    n_runs = len({run for run in stale.values() if run})
+    where = f" of study '{study_id}'" if study_id else ""
+    verb = "was" if len(stale) == 1 else "were"
+    diffs = [
+        _SETTING_LABELS.get(name, name)
+        for name in stale_differences(stored, stale, settings)
+    ]
+    detail = f" ({', '.join(diffs)})" if diffs else ""
+    return (
+        f"{_plural(len(stale), 'stored phonon result')} in "
+        f"{_plural(n_runs, 'run')}{where} {verb} computed with different "
+        f"settings{detail} and will be deleted. Continue?"
+    )

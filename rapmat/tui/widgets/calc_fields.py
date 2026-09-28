@@ -19,7 +19,7 @@ from rapmat.tui.widgets.form import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from rapmat.core.phonon_settings import PhononSettings
 
 
 SETTINGS_TOML = "TOML file"
@@ -206,6 +206,43 @@ def validate_calculator(vals: dict) -> str | None:
         "VASP command is required "
         "(or set ASE_VASP_COMMAND / VASP_COMMAND / VASP_SCRIPT)"
     )
+
+
+def phonon_settings_from_values(vals: dict) -> "PhononSettings":
+    from rapmat.core.phonon_settings import PhononSettings
+
+    external = _needs_external_config(vals.get("calculator", ""))
+    auto = external and is_auto_settings(vals)
+
+    uses_toml = external and not auto
+    return PhononSettings(
+        calculator=vals["calculator"],
+        calculator_settings="auto" if auto else "toml",
+        calculator_config=(
+            dict(vals.get("calculator_config_dict", {})) if uses_toml else {}
+        ),
+        config_path=vals.get("calculator_config", "").strip() if uses_toml else "",
+        supercell=tuple(vals["phonon_supercell"]),
+        mesh=tuple(vals["phonon_mesh"]),
+        displacement=vals["phonon_displacement"],
+        symprec=vals.get("phonon_symprec", 1e-3),
+        reduce_primitive=bool(vals.get("reduce_prim", True)),
+    )
+
+
+def phonon_settings_to_values(settings: "PhononSettings") -> dict:
+    return {
+        "calculator": settings.calculator.value,
+        "calculator_settings": (
+            SETTINGS_AUTO if settings.calculator_settings == "auto" else SETTINGS_TOML
+        ),
+        "calculator_config": settings.config_path,
+        "phonon_supercell": settings.supercell,
+        "phonon_mesh": settings.mesh,
+        "phonon_displacement": settings.displacement,
+        "phonon_symprec": settings.symprec,
+        "reduce_prim": settings.reduce_primitive,
+    }
 
 
 def remember_vasp_command(vals: dict, log=None) -> None:

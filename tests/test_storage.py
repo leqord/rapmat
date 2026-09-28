@@ -505,3 +505,30 @@ def test_upsert_clears_a_stale_deviation(store):
     evaluations = store.get_evaluations("r")
     assert len(evaluations) == 1
     assert evaluations[0].deviations is None
+
+
+def test_phonon_settings_listing_and_targeted_delete(store):
+    atoms = bulk("Si", "diamond", a=5.43)
+    store.create_study("ps", "Si", "bulk", "MATTERSIM")
+    for run in ("ps-a", "ps-b"):
+        store.create_run(name=run, study_id="ps")
+        add_generated_candidate(store, run, f"{run}/1", atoms)
+    store.save_phonon_result(
+        "ps-a/1", "ps-a", -0.01, params_gz="A", settings={"calculator": "X"}
+    )
+    store.save_phonon_result("ps-b/1", "ps-b", -0.02, params_gz="B")
+
+    assert store.get_phonon_settings([]) == {}
+    assert store.get_phonon_settings(["nope"]) == {}
+    listed = store.get_phonon_settings(["ps-a", "ps-b"])
+    assert listed == {
+        "ps-a/1": ("ps-a", '{"calculator": "X"}'),
+        "ps-b/1": ("ps-b", None),
+    }
+    assert store.get_phonon_result("ps-a/1").settings_json == '{"calculator": "X"}'
+
+    store.delete_phonon_results(["ps-a/1"])
+    assert store.get_phonon_result("ps-a/1") is None
+    assert phonon_params_blob(store, "ps-a/1") is None
+    assert store.get_phonon_result("ps-b/1").min_phonon_freq == -0.02
+    assert phonon_params_blob(store, "ps-b/1") == "B"

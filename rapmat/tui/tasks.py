@@ -116,6 +116,10 @@ class BackgroundTask:
         self._progress.cancelled = True
 
     @property
+    def cancelled(self) -> bool:
+        return self._progress.cancelled
+
+    @property
     def is_running(self) -> bool:
         return (
             self._thread is not None

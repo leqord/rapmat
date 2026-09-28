@@ -1,5 +1,6 @@
 from rapmat.core.config import SearchConfig
 from rapmat.core.entities import ResultRow
+from rapmat.core.phonon_settings import resolve_phonon_cutoff
 from rapmat.storage.status import StructureStatus
 from rapmat.tui.keymap import KeyBinding
 from rapmat.tui.router import ScreenRouter
@@ -18,6 +19,7 @@ class ResultsScreen(BaseResultsScreen):
     def __init__(self, state: "AppState", router: "ScreenRouter") -> None:
         super().__init__(state, router)
         self._run_name: str = ""
+        self._study_id: str = ""
 
     def bindings(self) -> list[KeyBinding]:
         return super().bindings() + [
@@ -35,8 +37,11 @@ class ResultsScreen(BaseResultsScreen):
 
         meta = store.get_run_metadata(run_name)
         cfg = meta.search_config if meta else SearchConfig()
+        self._study_id = (meta.study_id if meta else None) or ""
         self._pressure_gpa = cfg.pressure_gpa
-        self._phonon_cutoff = cfg.phonon_cutoff
+        self._phonon_cutoff = resolve_phonon_cutoff(
+            store, self._study_id or None, [run_name]
+        )
         self._symprec = self._get_symprec()
 
         records = store.get_structures(
@@ -137,10 +142,11 @@ class ResultsScreen(BaseResultsScreen):
     def _persist_symprec(self, value: float) -> None:
         self._state.store.set_run_config_value(self._run_name, "symprec", value)
 
-    def _on_phonon_complete(self, phonon_cutoff: float) -> None:
-        self._state.store.set_run_config_value(
-            self._run_name, "phonon_cutoff", phonon_cutoff
-        )
+    def _phonon_scope(self) -> tuple[str | None, list[str]]:
+        if self._study_id:
+            runs = self._state.store.get_study_runs(self._study_id)
+            return self._study_id, [r.name for r in runs if r.name]
+        return None, self._phonon_clear_target()
 
     def _phonon_clear_target(self) -> list[str]:
         return [self._run_name] if self._run_name else []

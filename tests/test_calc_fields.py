@@ -7,6 +7,9 @@ from rapmat.tui.widgets.calc_fields import (CALCULATOR_FIELD_KEYS,
                                             calculator_run_config,
                                             is_auto_settings,
                                             parse_toml_config,
+                                            phonon_fields,
+                                            phonon_settings_from_values,
+                                            phonon_settings_to_values,
                                             setup_calculator_signals,
                                             validate_calculator)
 from rapmat.tui.widgets.form import FormGroup
@@ -198,3 +201,69 @@ class TestCalculatorRunConfig:
         calculator_run_config(vals)
         assert cache_dict == {"encut": 520}
         assert vals["calculator_config_dict"] == {"encut": 520}
+
+
+def _phonon_settings(**overrides):
+    from rapmat.core.phonon_settings import PhononSettings
+
+    fields = dict(
+        calculator="VASP",
+        calculator_settings="toml",
+        calculator_config={"encut": 520},
+        config_path="vasp.toml",
+        supercell=(2, 3, 4),
+        mesh=(11, 12, 13),
+        displacement=0.02,
+        symprec=0.005,
+        reduce_primitive=False,
+    )
+    fields.update(overrides)
+    return PhononSettings(**fields)
+
+
+class TestPhononSettingsValues:
+    @pytest.mark.parametrize(
+        "settings",
+        [
+            _phonon_settings(),
+            _phonon_settings(
+                calculator_settings="auto", calculator_config={}, config_path=""
+            ),
+            _phonon_settings(
+                calculator="UPET", calculator_config={}, config_path=""
+            ),
+        ],
+        ids=["vasp-toml", "vasp-auto", "mlip"],
+    )
+    def test_round_trip_through_the_dialog_form(self, settings):
+        form = FormGroup(
+            [*calculator_fields(), *phonon_fields(include_symprec=True)],
+            label_width=20,
+        )
+        form.set_values(phonon_settings_to_values(settings))
+        setup_calculator_signals(form)
+
+        vals = form.get_values()
+        vals["calculator_config_dict"] = dict(settings.calculator_config)
+        assert phonon_settings_from_values(vals) == settings
+
+    @pytest.mark.parametrize(
+        "calculator, settings_label",
+        [("MATTERSIM", SETTINGS_TOML), ("VASP", SETTINGS_AUTO)],
+    )
+    def test_a_left_over_toml_is_ignored(self, calculator, settings_label):
+        settings = phonon_settings_from_values(
+            {
+                "calculator": calculator,
+                "calculator_settings": settings_label,
+                "calculator_config": "stale.toml",
+                "calculator_config_dict": {"encut": 1},
+                "phonon_supercell": (3, 3, 3),
+                "phonon_mesh": (20, 20, 20),
+                "phonon_displacement": 0.01,
+                "phonon_symprec": 1e-3,
+                "reduce_prim": True,
+            }
+        )
+        assert settings.calculator_config == {}
+        assert settings.config_path == ""

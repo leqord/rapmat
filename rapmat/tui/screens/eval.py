@@ -365,6 +365,7 @@ class EvalScreen(ScreenBase):
             ],
         )
 
+        self._form.set_values(self._phonon_prefill())
         setup_calculator_signals(self._form)
 
         self._error_text = urwid.Text("")
@@ -409,6 +410,39 @@ class EvalScreen(ScreenBase):
         self.refresh_footer()
 
         return urwid.WidgetPlaceholder(urwid.Frame(body=body))
+
+    def _phonon_prefill(self) -> dict:
+        from rapmat.core.phonon_settings import (default_phonon_grid,
+                                                 load_stored_phonons,
+                                                 prevailing_settings,
+                                                 resolve_phonon_cutoff)
+
+        store = self._state.store
+        meta = store.get_run_metadata(self._run_name) if self._run_name else None
+        if meta is None:
+            return {}
+
+        study_id = meta.study_id
+        runs = (
+            [r.name for r in store.get_study_runs(study_id) if r.name]
+            if study_id
+            else [self._run_name]
+        )
+
+        known = prevailing_settings(load_stored_phonons(store, runs))
+        if known is not None:
+            supercell, mesh, displacement = (
+                known.supercell, known.mesh, known.displacement
+            )
+        else:
+            (supercell, mesh), displacement = default_phonon_grid(meta.domain), 1e-2
+
+        return {
+            "phonon_supercell": supercell,
+            "phonon_mesh": mesh,
+            "phonon_displacement": displacement,
+            "phonon_cutoff": resolve_phonon_cutoff(store, study_id, [self._run_name]),
+        }
 
     def _on_clear_cache(self, _btn=None) -> None:
         if self._running:

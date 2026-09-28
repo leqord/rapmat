@@ -14,9 +14,9 @@ Rapid materials discovery in the terminal.
 
 | Path | Contents |
 |---|---|
-| `rapmat/core/` | Search, deduplication, phonons, evaluation, export |
+| `rapmat/core/` | Search, deduplication, phonons, validation, export |
 | `rapmat/calculators/` | MLIP and DFT backends |
-| `rapmat/storage/` | Store and its schema migrations |
+| `rapmat/storage/` | Database access layer and schema migrations |
 | `rapmat/tui/` | Terminal user interface |
 | `rapmat/utils/` | Hardware detection, crash-safe spglib calls, other helpers |
 | `tests/` | pytest suite |
@@ -211,7 +211,7 @@ The `mattersim` and `upet` extras are necessary. The models are downloaded on fi
 3. Answer **Yes** to *View results?*. Structures are sorted by energy per atom. Diamond Si comes first: the leading rows are cells of different size of the same structure, with *Final SG* `Fd-3m (227)` (if *symprec* is kept loose enough) and an energy of about -5.4095 eV/atom.
 4. `Esc` twice, back to the study -> `d` (Dedup) on the run -> `F5` (**Analyze**), then **Apply to DB** (`a`) and **OK**. `Esc` twice, back to the study, and `Enter` on the run reopens Results. `d` hides the duplicates.
 5. `s` (Save): *Scope* `All N filtered structures`, *Format* `cif`, keep *Results table* at `txt`, then **Save**. The structures and `results_table.txt` are written to `saved_<run>/` in the directory rapmat was started from. The table should roughly match [`examples/expected_results_table.txt`](examples/expected_results_table.txt).
-6. `v` (Evaluate): *Ref. calculator* `UPET`, *Top N* `20` -> `F5` (**Evaluate**). The Eval Results header shows Kendall tau with its p-value and n, and the MAE of MatterSim against UPET over the visible structures. Expect about tau = 0.82 (p = 4.6e-9, n = 20) and an MAE of 0.028 eV/atom. [`examples/expected_eval.txt`](examples/expected_eval.txt) contains the full header and table examples.
+6. `v` (Validate): *Ref. calculator* `UPET`, *Top N* `20` -> `F5` (**Evaluate**). The Validation Results header shows Kendall tau with its p-value and n, and the MAE of MatterSim against UPET over the visible structures. Expect about tau = 0.82 (p = 4.6e-9, n = 20) and an MAE of 0.028 eV/atom. [`examples/expected_eval.txt`](examples/expected_eval.txt) contains the full header and table examples.
 
 The digits can differ with the hardware and library versions.
 
@@ -258,7 +258,7 @@ Lists the relaxed structures of one run, sorted by energy per atom (enthalpy und
 | `Enter` | 3D view |
 | `s` | Save structures |
 | `o` | Options |
-| `v` | Evaluate against a reference calculator |
+| `v` | Validate against a reference calculator |
 | `t` | Maximum thickness |
 | `p` | Phonons |
 | `d` | Show or hide duplicates |
@@ -266,7 +266,7 @@ Lists the relaxed structures of one run, sorted by energy per atom (enthalpy und
 
 `Esc` first clears an active search, then goes back.
 
-### Evaluation
+### Validation
 
 Computes single-point energies of the MLIP-relaxed structures with a reference calculator, typically VASP, and compares the rankings.
 

@@ -42,7 +42,7 @@ _DYN_COLS = [
 
 
 class EvalResultsScreen(BaseResultsScreen):
-    title = "Eval Results"
+    title = "Validation Results"
 
     def __init__(
         self,
@@ -72,7 +72,7 @@ class EvalResultsScreen(BaseResultsScreen):
 
     @property
     def breadcrumb_title(self) -> str:
-        return f"Eval Results: {self._run_name}"
+        return f"Validation Results: {self._run_name}"
 
     def _fetch_data(self, progress_callback=None) -> None:
         self._results = list(self._eval_rows)
@@ -284,11 +284,11 @@ class EvalResultsScreen(BaseResultsScreen):
 
 
 class EvalScreen(ScreenBase):
-    title = "Evaluation"
+    title = "Validation"
 
     @property
     def breadcrumb_title(self) -> str:
-        return f"Evaluation: {self._run_name}" if self._run_name else self.title
+        return f"Validation: {self._run_name}" if self._run_name else self.title
 
     def __init__(
         self,

@@ -22,8 +22,8 @@ class ResultsScreen(BaseResultsScreen):
     def bindings(self) -> list[KeyBinding]:
         return super().bindings() + [
             KeyBinding(
-                ("v",), "Eval", self._open_eval,
-                help="Evaluate using a reference calculator", priority=15,
+                ("v",), "Val", self._open_eval,
+                help="Validate against a reference calculator", priority=15,
             ),
         ]
 

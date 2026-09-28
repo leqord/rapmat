@@ -101,7 +101,7 @@ class RapmatApp:
         message = (
             f"Could not connect to the configured database.\n\n"
             f"  {err_type}: {err_msg}\n\n"
-            f"The TUI is running with a temporary in-memory store.\n"
+            f"The TUI is running with a temporary in-memory database.\n"
             f"Data will NOT be persisted until the connection is fixed.\n\n"
             f"Open DB Settings to reconfigure, or Continue to proceed."
         )

@@ -251,7 +251,7 @@ Below the menu, Home shows the database location and the detected hardware with 
 
 ### Results
 
-Lists the relaxed structures of one run, sorted by energy per atom (enthalpy under pressure), lowest first. T
+Lists the relaxed structures of one run, sorted by energy per atom (enthalpy under pressure), lowest first.
 
 | Key | Action |
 |---|---|
@@ -270,7 +270,7 @@ Lists the relaxed structures of one run, sorted by energy per atom (enthalpy und
 
 Computes single-point energies of the MLIP-relaxed structures with a reference calculator, typically VASP, and compares the rankings.
 
-The structures passed are those visible in Results when `v` is pressed, including the thickness filer, for example. 
+The structures passed are those visible in Results when `v` is pressed, including the thickness filter, for example. 
 
 `t` and `d` filters work as in Results.
 

@@ -80,7 +80,7 @@ class ResultsScreen(BaseResultsScreen):
         self._label_spacegroups(progress_callback)
 
     def _columns_def(self) -> list[tuple[str, int]]:
-        epa_label = "H/A" if self._pressure_gpa > 0 else "E/A"
+        epa_label = "H/at" if self._pressure_gpa > 0 else "E/at"
         cols = [
             ("#", 4),
             ("ID", 10),

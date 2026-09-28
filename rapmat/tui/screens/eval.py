@@ -28,9 +28,9 @@ from rapmat.tui.widgets.progress import ProgressPanel
 _RESULT_COLS_BASE = [
     ("ID", 8),
     ("Formula", 10),
-    ("MLIP eV/A", 12),
-    ("Ref eV/A", 12),
-    ("Δ eV/A", 10),
+    ("MLIP eV/at", 12),
+    ("Ref eV/at", 12),
+    ("Δ eV/at", 10),
     ("MLIP#", 6),
     ("Ref#", 6),
 ]
@@ -155,7 +155,7 @@ class EvalResultsScreen(BaseResultsScreen):
                 metric_parts.append(("details", "  |  "))
             metric_parts.extend([
                 ("form_label", "MAE: "),
-                ("details", f"{r['mae_epa']:.4f} eV/A"),
+                ("details", f"{r['mae_epa']:.4f} eV/at"),
             ])
 
         s = self._stability
@@ -188,7 +188,7 @@ class EvalResultsScreen(BaseResultsScreen):
     def _columns_def(self) -> list:
         cols = list(_RESULT_COLS_BASE)
         if self._pressure_gpa > 0:
-            cols[2:4] = [("MLIP H/A", 12), ("Ref H/A", 12)]
+            cols[2:4] = [("MLIP H/at", 12), ("Ref H/at", 12)]
         if self._show_thickness:
             cols.append(("Thick", 9))
         if self._show_dynamical_stability:
@@ -250,10 +250,10 @@ class EvalResultsScreen(BaseResultsScreen):
         mlip = ranking_per_atom(r)
         extras = []
         if self._pressure_gpa > 0:
-            extras.append(("details", f"Ref Enthalpy/A: {ref:.6f} eV"))
+            extras.append(("details", f"Ref Enthalpy/at: {ref:.6f} eV"))
         extras += [
-            ("details", f"Ref Energy/A: {r.ref_energy_per_atom:.6f} eV"),
-            ("details", f"Δ (Ref-MLIP): {ref - mlip:+.6f} eV/A"),
+            ("details", f"Ref Energy/at: {r.ref_energy_per_atom:.6f} eV"),
+            ("details", f"Δ (Ref-MLIP): {ref - mlip:+.6f} eV/at"),
         ]
         mr, rr = self._rank_map.get(r.structure_id, (None, None))
         if mr is not None and rr is not None:

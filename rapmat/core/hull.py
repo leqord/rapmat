@@ -310,7 +310,7 @@ def plot_binary_hull(
     quantity = "enthalpy" if use_enthalpy else "energy"
     ax.axhline(0, color="black", linewidth=0.5, zorder=0)
     ax.set_xlabel(f"$x$ in {elements[0]}$_{{1-x}}${elements[1]}$_x$")
-    ax.set_ylabel(f"Formation {quantity} (eV/A)")
+    ax.set_ylabel(f"Formation {quantity} (eV/at)")
     ax.set_title(f"Convex hull - {elements[0]}-{elements[1]}")
     ax.set_xlim(-0.02, 1.02)
     ax.legend(loc="best", framealpha=0.9)

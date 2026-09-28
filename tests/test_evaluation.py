@@ -342,14 +342,14 @@ class TestUnderPressure:
 
         assert screen._rank_map == {"dense": (1, 1), "loose": (2, 2)}
         labels = [name for name, _ in screen._columns_def()]
-        assert labels[2:4] == ["MLIP H/A", "Ref H/A"]
+        assert labels[2:4] == ["MLIP H/at", "Ref H/at"]
 
         dense = next(r for r in rows if r.structure_id == "dense")
         cells = screen._format_row(dense)
         assert cells[2] == f"{dense.enthalpy_per_atom:.4f}"
         details = " ".join(text for _, text in screen._get_extra_details(dense))
-        assert "Ref Enthalpy/A" in details
-        assert "Ref Energy/A: -5.090000" in details
+        assert "Ref Enthalpy/at" in details
+        assert "Ref Energy/at: -5.090000" in details
 
     def test_eval_results_at_zero_pressure_keep_energy_labels(self):
         from rapmat.tui.screens.eval import EvalResultsScreen
@@ -364,7 +364,7 @@ class TestUnderPressure:
         screen._fetch_data()
 
         labels = [name for name, _ in screen._columns_def()]
-        assert labels[2:4] == ["MLIP eV/A", "Ref eV/A"]
+        assert labels[2:4] == ["MLIP eV/at", "Ref eV/at"]
         details = " ".join(text for _, text in screen._get_extra_details(rows[0]))
         assert "Enthalpy" not in details
 

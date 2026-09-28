@@ -1,4 +1,4 @@
-   #    ID  Formula    Final SG             E/A    Fmax  Flags    Status
+   #    ID  Formula    Final SG            E/at    Fmax  Flags    Status
 ----  ----  ---------  ---------------  -------  ------  -------  --------
    1  3625  Si8        Fd-3m (227)      -5.4095   0               OK
   60  3603  Si8        P6_3/mmc (194)   -5.4062   0.006           OK

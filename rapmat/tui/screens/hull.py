@@ -196,7 +196,7 @@ class PhaseAnalysisScreen(BaseResultsScreen):
         self._label_spacegroups(progress_callback)
 
     def _columns_def(self) -> list[tuple[str, int]]:
-        epa_label = "H/A" if self._use_enthalpy else "E/A"
+        epa_label = "H/at" if self._use_enthalpy else "E/at"
         form_label = "H_form" if self._use_enthalpy else "E_form"
         cols: list[tuple[str, int]] = [("#", 4), ("ID", 28)]
         if self._system_size < 2:
@@ -298,14 +298,14 @@ class PhaseAnalysisScreen(BaseResultsScreen):
                 extra.append(
                     (
                         "details",
-                        f"Formation {quantity}: {result.formation_energy:.4f} eV/A\n",
+                        f"Formation {quantity}: {result.formation_energy:.4f} eV/at\n",
                     )
                 )
             if result.energy_above_hull is not None:
                 extra.append(
                     (
                         "details",
-                        f"{quantity} Above Hull: {result.energy_above_hull:.4f} eV/A\n",
+                        f"{quantity} Above Hull: {result.energy_above_hull:.4f} eV/at\n",
                     )
                 )
             if result.is_stable is not None:
@@ -354,7 +354,7 @@ class PhaseAnalysisScreen(BaseResultsScreen):
 
             return ModalDialog.input_text(
                 title="Hull Cutoff",
-                message="Enter Energy Above Hull cutoff (eV/A):",
+                message="Enter Energy Above Hull cutoff (eV/at):",
                 parent=parent,
                 on_save=_on_save,
                 on_cancel=close,

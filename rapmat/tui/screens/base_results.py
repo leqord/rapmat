@@ -528,14 +528,14 @@ class BaseResultsScreen(ScreenBase):
             if self._pressure_gpa > 0:
                 h = result.enthalpy_per_atom
                 if h is not None:
-                    add_cell("Enthalpy/A", f"{h:.4f} eV")
-                add_cell("Energy/A", f"{epa:.4f} eV")
+                    add_cell("Enthalpy/at", f"{h:.4f} eV")
+                add_cell("Energy/at", f"{epa:.4f} eV")
                 vol = result.volume
                 if vol is not None:
                     add_cell("Volume", f"{vol:.3f} Å³")
                 add_cell("Pressure", f"{self._pressure_gpa} GPa")
             else:
-                add_cell("Energy/A", f"{epa:.4f} eV")
+                add_cell("Energy/at", f"{epa:.4f} eV")
 
             fmax = result.fmax
             if fmax is not None:
